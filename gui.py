@@ -139,26 +139,71 @@ class AutoPostGUI:
         self.sheet.column_width(column=4, width=140)   # Status
         self.sheet.column_width(column=5, width=60)    # Chọn
 
-        # Cột Status chỉ đọc (không cho sửa tay trực tiếp nhưng có thể tự xóa)
+        # Cột Status chỉ đọc (cột Chọn KHÔNG để readonly để code có thể set_cell_data, thay vào đó chặn sửa ô bằng begin_edit_cell)
         self.sheet.readonly_columns(columns=[4])
+
+        # Bind sự kiện chặn soạn thảo cột Chọn
+        self.sheet.extra_bindings("begin_edit_cell", self._begin_edit_cell)
 
         # Bind sự kiện double click vào ô để tự động đảo Chọn (cột 5)
         self.sheet.extra_bindings("double_click_left_click", self._double_click_sheet)
 
+    def _begin_edit_cell(self, event = None):
+        """Chặn người dùng sửa thủ công cột Chọn (cột 5)."""
+        try:
+            col = None
+            if event is not None:
+                if hasattr(event, "column"):
+                    col = event.column
+                elif isinstance(event, dict) and "column" in event:
+                    col = event["column"]
+                elif isinstance(event, (list, tuple)) and len(event) >= 2:
+                    col = event[1]
+            
+            if col == 5:  # Cột Chọn (0-indexed)
+                return False
+        except:
+            pass
+        return True
+
     def _double_click_sheet(self, event = None):
         """Khi người dùng double click vào cột Chọn, tự động toggle trạng thái giữa ✅ và trống."""
         try:
-            selected = self.sheet.get_currently_selected()
-            if selected is None:
-                return
-            row, col = selected.row, selected.column
-            if col == 5:  # Cột Chọn (0-indexed)
-                current = str(self.sheet.get_cell_data(row, col)).strip()
-                new_val = "" if current == "✅" else "✅"
+            # Lấy dòng và cột từ sự kiện double click (hỗ trợ nhiều định dạng tksheet khác nhau)
+            row, col = None, None
+            if event is not None:
+                if hasattr(event, "row") and hasattr(event, "column"):
+                    row, col = event.row, event.column
+                elif isinstance(event, dict) and "row" in event and "column" in event:
+                    row, col = event["row"], event["column"]
+                elif isinstance(event, (list, tuple)) and len(event) >= 2:
+                    row, col = event[0], event[1]
+
+            # Fallback nếu không lấy được từ event
+            if row is None or col is None:
+                selected = self.sheet.get_currently_selected()
+                if selected is not None:
+                    if isinstance(selected, (list, tuple)):
+                        row, col = selected[0], selected[1]
+                    else:
+                        row, col = selected.row, selected.column
+
+            if row is not None and col == 5:  # Cột Chọn (0-indexed)
+                val = self.sheet.get_cell_data(row, col)
+                current = "" if val is None else str(val).strip()
+                # Đảo trạng thái: Nếu đang là ✅ thì bỏ đi, ngược lại nếu rỗng/None/nan thì tích ✅
+                new_val = "" if current in ("✅", "None", "nan") else "✅"
                 self.sheet.set_cell_data(row, col, new_val)
                 self.sheet.refresh()
         except Exception as e:
             self._ghi_log(f"Lỗi nhấp đúp ô: {e}")
+
+    def _safe_dialog_accept(self, dialog):
+        """Bắt và chấp nhận Dialog một cách an toàn để tránh TargetClosedError khi đóng trang."""
+        try:
+            dialog.accept()
+        except Exception:
+            pass
 
     def _tao_log_panel(self):
         """Tạo panel log bên dưới."""
@@ -348,14 +393,14 @@ class AutoPostGUI:
         self._luu_du_lieu()
 
         posts = self._lay_du_lieu_tu_bang()
-        # Lọc các bài viết được tích chọn (cột Chọn có giá trị ✅)
+        # Lọc các bài viết được tích chọn (dòng nào cột Chọn KHÔNG RỖNG thì đăng)
         posts_duoc_chon = [p for p in posts
                            if p.get('ma_bai', '').strip()
-                           and p.get('chon', '').strip() == '✅']
+                           and p.get('chon', '').strip() != '']
 
         if not posts_duoc_chon:
-            messagebox.showinfo("Thông báo", "Không có bài đăng nào được tích chọn (✅) để đăng.\n"
-                                             "Vui lòng nhấp đúp ô ở cột 'Chọn' để tích chọn bài viết.")
+            messagebox.showinfo("Thông báo", "Không có bài đăng nào được chọn để đăng.\n"
+                                             "Vui lòng điền ký tự bất kỳ hoặc tích chọn (✅) vào cột 'Chọn' của dòng cần đăng.")
             return
 
         # Gom toàn bộ link nhóm để tính tổng số cửa sổ
@@ -448,7 +493,7 @@ class AutoPostGUI:
                     ]
                 )
                 page = context.pages[0] if context.pages else context.new_page()
-                page.on("dialog", lambda d: d.accept())
+                page.on("dialog", lambda d: self._safe_dialog_accept(d))
                 
                 self._ghi_log_safe("📱 Đang chuyển hướng tới Facebook...")
                 page.goto('https://www.facebook.com/', wait_until='domcontentloaded')
@@ -563,52 +608,73 @@ class AutoPostGUI:
                 self._ghi_log_safe(f"⚠️ Cảnh báo copy profile: {e_copy}")
 
         try:
-            with sync_playwright() as p:
-                # Khởi tạo trình duyệt riêng biệt cho luồng này
-                context = p.chromium.launch_persistent_context(
-                    user_data_dir=temp_session,
-                    headless=False,
-                    viewport={'width': 1000, 'height': 750},
-                    locale='vi-VN',
-                    args=[
-                        '--disable-blink-features=AutomationControlled',
-                        '--no-sandbox',
-                    ]
-                )
-                page = context.pages[0] if context.pages else context.new_page()
-                page.on("dialog", lambda d: d.accept())
+            self._ghi_log_safe(f"➡️ Cửa sổ {task_idx}/{total_tasks}: Đang mở trình duyệt cho [{ma_bai}] Nhóm {stt}/{tong}...")
+            self._cap_nhat_status_bang(ma_bai, "ĐANG CHUẨN BỊ...")
 
-                success = False
+            # Tạo thư mục session tạm thời cho luồng này để tránh xung đột SingletonLock của Chromium
+            temp_session = f"{SESSION_DIR}_temp_{task_idx}"
+            temp_dirs.append(temp_session)
+            os.makedirs(temp_session, exist_ok=True)
+            if os.path.exists(SESSION_DIR):
                 try:
-                    # Chuyển hướng trực tiếp tới nhóm
-                    if dieu_huong_toi_nhom(page, url):
-                        if mo_hop_thoai_dang_bai(page):
-                            # Gọi hàm tai_file_media_safe xử lý thông minh để chặn File Explorer OS!
-                            if self._tai_file_media_safe(page, media):
-                                if go_caption(page, caption):
-                                    success = True
+                    shutil.copytree(SESSION_DIR, temp_session, dirs_exist_ok=True)
+                    # Xóa file lock của Chromium nếu có
+                    lock_file = os.path.join(temp_session, "SingletonLock")
+                    if os.path.exists(lock_file):
+                        os.remove(lock_file)
+                except Exception as e_copy:
+                    self._ghi_log_safe(f"⚠️ Cảnh báo copy profile: {e_copy}")
 
-                    if success:
-                        ban_ghi_thanh_cong[ma_bai] = ban_ghi_thanh_cong.get(ma_bai, 0) + 1
-                        self._cap_nhat_status_bang(ma_bai, "CHỜ BẤM ĐĂNG...")
-                        self._ghi_log_safe(f"  ✅ Cửa sổ {task_idx} cho [{ma_bai}] chuẩn bị XONG!")
-                    else:
-                        self._cap_nhat_status_bang(ma_bai, "THẤT BẠI")
-                        self._ghi_log_safe(f"  ❌ Cửa sổ {task_idx} cho [{ma_bai}] bị LỖI chuẩn bị.")
-                except Exception as task_err:
-                    self._cap_nhat_status_bang(ma_bai, "LỖI")
-                    self._ghi_log_safe(f"  ❌ Lỗi tương tác ở cửa sổ {task_idx} ([{ma_bai}]): {task_err}")
-                finally:
-                    task['event_chuan_bi_xong'].set()
+            try:
+                with sync_playwright() as p:
+                    # Khởi tạo trình duyệt riêng biệt cho luồng này
+                    context = p.chromium.launch_persistent_context(
+                        user_data_dir=temp_session,
+                        headless=False,
+                        viewport={'width': 1000, 'height': 750},
+                        locale='vi-VN',
+                        args=[
+                            '--disable-blink-features=AutomationControlled',
+                            '--no-sandbox',
+                        ]
+                    )
+                    page = context.pages[0] if context.pages else context.new_page()
+                    page.on("dialog", lambda d: self._safe_dialog_accept(d))
 
-                # DÙ THÀNH CÔNG HAY LỖI, LUÔN LUÔN GIỮ CỬA SỔ TRÌNH DUYỆT MỞ CHỜ USER BẤM ĐĂNG XONG
-                task['event_cho_dang'].wait()
+                    success = False
+                    try:
+                        # Chuyển hướng trực tiếp tới nhóm
+                        if dieu_huong_toi_nhom(page, url):
+                            if mo_hop_thoai_dang_bai(page):
+                                # Gọi hàm tai_file_media_safe xử lý thông minh để chặn File Explorer OS!
+                                if self._tai_file_media_safe(page, media):
+                                    if go_caption(page, caption):
+                                        success = True
 
-                # Đóng trình duyệt
-                context.close()
+                        if success:
+                            ban_ghi_thanh_cong[ma_bai] = ban_ghi_thanh_cong.get(ma_bai, 0) + 1
+                            self._cap_nhat_status_bang(ma_bai, "CHỜ BẤM ĐĂNG...")
+                            self._ghi_log_safe(f"  ✅ Cửa sổ {task_idx} cho [{ma_bai}] chuẩn bị XONG!")
+                        else:
+                            self._cap_nhat_status_bang(ma_bai, "THẤT BẠI")
+                            self._ghi_log_safe(f"  ❌ Cửa sổ {task_idx} cho [{ma_bai}] bị LỖI chuẩn bị.")
+                    except Exception as task_err:
+                        self._cap_nhat_status_bang(ma_bai, "LỖI")
+                        self._ghi_log_safe(f"  ❌ Lỗi tương tác ở cửa sổ {task_idx} ([{ma_bai}]): {task_err}")
+                    finally:
+                        task['event_chuan_bi_xong'].set()
 
-        except Exception as e:
-            self._ghi_log_safe(f"❌ Lỗi khởi động trình duyệt ở cửa sổ {task_idx} ([{ma_bai}]): {e}")
+                    # DÙ THÀNH CÔNG HAY LỖI, LUÔN LUÔN GIỮ CỬA SỔ TRÌNH DUYỆT MỞ CHỜ USER BẤM ĐĂNG XONG
+                    task['event_cho_dang'].wait()
+
+                    # Đóng trình duyệt
+                    context.close()
+
+            except Exception as e:
+                self._ghi_log_safe(f"❌ Lỗi khởi động trình duyệt ở cửa sổ {task_idx} ([{ma_bai}]): {e}")
+        finally:
+            # Bảo đảm 100% luồng chính không bị treo chờ đợi bất kể tình huống lỗi nào xảy ra
+            task['event_chuan_bi_xong'].set()
 
     def _tai_file_media_safe(self, page, media_files) -> bool:
         """Hàm tải file media cải tiến vượt trội: Sử dụng expect_file_chooser để chặn đứng cửa sổ File Explorer OS."""
