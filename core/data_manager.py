@@ -29,6 +29,7 @@ def tao_bai_moi() -> dict:
         "caption": "",
         "media": "",
         "status": "",
+        "chon": "✅",
     }
 
 
@@ -84,9 +85,10 @@ def posts_to_dataframe(posts: list[dict]) -> pd.DataFrame:
         caption -> Caption
         media   -> Anh_Video
         status  -> Status
+        chon    -> Chon
     """
     if not posts:
-        return pd.DataFrame(columns=['Ma_Bai_Dang', 'Link_Bai_Dang', 'Caption', 'Anh_Video', 'Status'])
+        return pd.DataFrame(columns=['Ma_Bai_Dang', 'Link_Bai_Dang', 'Caption', 'Anh_Video', 'Status', 'Chon'])
 
     rows = []
     for p in posts:
@@ -96,6 +98,7 @@ def posts_to_dataframe(posts: list[dict]) -> pd.DataFrame:
             'Caption': p.get('caption', ''),
             'Anh_Video': p.get('media', ''),
             'Status': p.get('status', ''),
+            'Chon': p.get('chon', '✅'),
         })
     return pd.DataFrame(rows)
 
@@ -106,7 +109,7 @@ def cap_nhat_status_json(ma_bai: str, gia_tri: str, duong_dan: str = None):
 
     Args:
         ma_bai: Mã bài đăng cần cập nhật.
-        gia_tri: Giá trị Status mới (VD: 'DONE (2/3)').
+        gia_tri: Giá trị Status mới (VD: '18:30 (2/3)').
         duong_dan: Đường dẫn file JSON.
     """
     posts = doc_posts(duong_dan)

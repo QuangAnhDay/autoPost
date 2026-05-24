@@ -62,61 +62,104 @@ def auto_post_semi_auto():
     
     # 1. Đọc dữ liệu
     df = doc_du_lieu(NGUON_DU_LIEU)
-    if df is None: return
+    if df is None or len(df) == 0: return
 
     # 2. Tiền kiểm tra
     hop_le, _ = tien_kiem_tra_toan_bo(df)
     if not hop_le: return
+
+    # Thu thập tất cả các nhiệm vụ đăng bài từ mọi dòng được chọn
+    nhiem_vu = []
+    for idx, row in df.iterrows():
+        ma_bai = str(row['Ma_Bai_Dang']).strip()
+        caption = str(row['Caption']).strip()
+        if caption.lower() == 'nan': caption = ""
+        links = tach_danh_sach(row['Link_Bai_Dang'])
+        media = phan_giai_media(row['Anh_Video'])
+        for stt, url in enumerate(links, start=1):
+            nhiem_vu.append({
+                'ma_bai': ma_bai,
+                'url': url,
+                'media': media,
+                'caption': caption,
+                'stt': stt,
+                'tong': len(links),
+                'row_idx': idx
+            })
+
+    if not nhiem_vu:
+        print(f"{Fore.YELLOW}Không có link nhóm nào để đăng!{Style.RESET_ALL}")
+        return
+
+    print(f"\n{Fore.GREEN}🚀 Chuẩn bị mở {len(nhiem_vu)} tab chuẩn bị song song cho {len(df)} bài viết...{Style.RESET_ALL}")
 
     # 3. Khởi tạo trình duyệt
     with sync_playwright() as p:
         context, page = khoi_tao_trinh_duyet(p)
         cho_dang_nhap(page)
 
-        # 4. Vòng lặp bài đăng
+        # Mở và chuẩn bị tất cả các tab
+        danh_sach_tab = []
+        ban_ghi_thanh_cong = {} # ma_bai -> count
+
+        for task_idx, task in enumerate(nhiem_vu, start=1):
+            ma_bai = task['ma_bai']
+            url = task['url']
+            media = task['media']
+            caption = task['caption']
+            stt = task['stt']
+            tong = task['tong']
+            
+            print(f"\n{Fore.CYAN}➡️ [{task_idx}/{len(nhiem_vu)}] Đang mở tab cho [{ma_bai}] Nhóm {stt}/{tong} -> {url}{Style.RESET_ALL}")
+            
+            try:
+                tab = context.new_page()
+                tab.on("dialog", lambda d: d.accept())
+                
+                # Thực hiện các bước chuẩn bị (Tải ảnh trước, gõ caption sau!)
+                success = False
+                if dieu_huong_toi_nhom(tab, url):
+                    if mo_hop_thoai_dang_bai(tab):
+                        if tai_file_media(tab, media):
+                            if go_caption(tab, caption):
+                                success = True
+                                
+                if success:
+                    danh_sach_tab.append(tab)
+                    ban_ghi_thanh_cong[ma_bai] = ban_ghi_thanh_cong.get(ma_bai, 0) + 1
+                    print(f"{Fore.GREEN}✅ Đã chuẩn bị xong tab {task_idx}!{Style.RESET_ALL}")
+                else:
+                    tab.close()
+                    print(f"{Fore.RED}❌ Thất bại khi chuẩn bị tab {task_idx}{Style.RESET_ALL}")
+            except Exception as e:
+                print(f"{Fore.RED}❌ Lỗi tab {task_idx}: {e}{Style.RESET_ALL}")
+            
+            # Chờ một chút giữa các tab để tự nhiên
+            if task_idx < len(nhiem_vu):
+                time.sleep(random.randint(2, 4))
+
+        # Tạm dừng chờ người dùng bấm Đăng trên tất cả các tab
+        if danh_sach_tab:
+            print(f"\n{Fore.YELLOW}⚠️  Đã chuẩn bị xong TẤT CẢ {len(danh_sach_tab)} tab.")
+            print(f"{Fore.YELLOW}👉 Mời bạn chuyển sang trình duyệt bấm 'Đăng' thủ công trên từng tab.{Style.RESET_ALL}")
+            input(f"{Fore.YELLOW}👉 Sau khi đã đăng xong HẾT tất cả các tab, nhấn [ENTER] tại đây để tiếp tục...{Style.RESET_ALL}")
+            
+            # Đóng tất cả các tab
+            for tab in danh_sach_tab:
+                try: tab.close()
+                except: pass
+
+        # 4. Cập nhật Status thời gian thực cho tất cả bài đăng
+        import datetime
+        bay_gio = datetime.datetime.now().strftime("%H:%M (%d/%m)")
         for idx, row in df.iterrows():
             ma_bai = str(row['Ma_Bai_Dang']).strip()
-            caption = str(row['Caption']).strip()
-            if caption.lower() == 'nan': caption = ""
-            
             links = tach_danh_sach(row['Link_Bai_Dang'])
-            media = phan_giai_media(row['Anh_Video'])
+            so_tc = ban_ghi_thanh_cong.get(ma_bai, 0)
             
-            print(f"\n{Fore.CYAN}📝 Đang xử lý bài: {ma_bai} ({len(links)} nhóm){Style.RESET_ALL}")
-            
-            danh_sach_tab = []
-            so_thanh_cong = 0
-            
-            for stt, url in enumerate(links, start=1):
-                try:
-                    tab = context.new_page()
-                    tab.on("dialog", lambda d: d.accept())
-                    if chuan_bi_bai_tren_tab(tab, url, media, caption, ma_bai, stt, len(links)):
-                        danh_sach_tab.append(tab)
-                        so_thanh_cong += 1
-                    else:
-                        tab.close()
-                except Exception as e:
-                    print(f"{Fore.RED}Lỗi tab {stt}: {e}{Style.RESET_ALL}")
-                
-                if stt < len(links): time.sleep(random.randint(3, 7))
-
-            # Tạm dừng chờ người dùng bấm Đăng
-            if danh_sach_tab:
-                print(f"\n{Fore.YELLOW}⚠️  Đã chuẩn bị xong {len(danh_sach_tab)} tab. Mời bạn bấm 'Đăng' thủ công trên trình duyệt.{Style.RESET_ALL}")
-                input(f"{Fore.YELLOW}👉 Sau khi đăng xong HẾT, nhấn [ENTER] tại đây để tiếp tục...{Style.RESET_ALL}")
-                for tab in danh_sach_tab:
-                    try: tab.close()
-                    except: pass
-            
-            # Cập nhật Status
-            ket_qua = f"DONE ({so_thanh_cong}/{len(links)})"
+            ket_qua = f"{bay_gio} ({so_tc}/{len(links)})"
             cap_nhat_status(NGUON_DU_LIEU, ma_bai, ket_qua)
-            print(f"{Fore.GREEN}🏁 Đã cập nhật trạng thái cho {ma_bai}{Style.RESET_ALL}")
-
-            if idx < len(df) - 1:
-                print(f"⏳ Nghỉ 15s trước bài tiếp theo...")
-                time.sleep(15)
+            print(f"{Fore.GREEN}🏁 Đã cập nhật trạng thái cho {ma_bai} -> {ket_qua}{Style.RESET_ALL}")
 
         dong_trinh_duyet(context)
     print(f"\n{Fore.GREEN}🎉 HOÀN THÀNH TẤT CẢ!{Style.RESET_ALL}")
