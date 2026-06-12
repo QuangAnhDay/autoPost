@@ -1,5 +1,7 @@
 venv/
 credentials.json
 data/
+profiles/
 __pycache__/
 *.pyc
+*.log

@@ -8,8 +8,23 @@ Bấm "Bắt đầu đăng" để trigger Playwright posting engine.
 
 import os
 import sys
+import asyncio
+
+# Thiết lập UTF-8 cho stdout/stderr trên Windows để tránh lỗi UnicodeEncodeError khi in các ký tự tiếng Việt / Emojis
+# Đồng thời cấu hình WindowsProactorEventLoopPolicy để hỗ trợ các tiến trình con (Playwright) trong luồng ngầm
+if sys.platform.startswith("win"):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    except Exception:
+        pass
+
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, filedialog
 import threading
 import time
 import datetime
@@ -43,40 +58,149 @@ class AutoPostGUI:
 
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title(WINDOW_TITLE)
-        self.root.geometry(WINDOW_SIZE)
-        self.root.minsize(MIN_WIDTH, MIN_HEIGHT)
+        self.root.title("AutoPost Mini")
+        self.root.resizable(False, False)
+        self.root.attributes("-topmost", True)
+
+        # Tính toán tọa độ xuất hiện ở góc trên bên phải màn hình
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        x_coord = screen_width - 320 - 20
+        y_coord = 20
+        self.root.geometry(f"320x180+{x_coord}+{y_coord}")
 
         # Áp dụng theme Sun Valley (Windows 11 style)
         sv_ttk.set_theme("dark")
 
         self.dang_chay = False  # Flag đang chạy posting engine
         self._posting_thread = None
+        self.posts_in_memory = []
 
-        self._tao_giao_dien()
+        self.editor_win = None
+        self.sheet = None
+        self.log_text = None
+
+        self._tao_giao_dien_mini()
         self._tai_du_lieu()
 
-    # ═══════════════════════════════════════════════════════════
-    # TẠO GIAO DIỆN
-    # ═══════════════════════════════════════════════════════════
+    def _tao_giao_dien_mini(self):
+        """Tạo giao diện mini dashboard siêu gọn ở góc trên bên phải màn hình."""
+        main_frame = ttk.Frame(self.root, padding=12)
+        main_frame.pack(fill=tk.BOTH, expand=True)
 
-    def _tao_giao_dien(self):
-        """Tạo toàn bộ layout: toolbar + spreadsheet + log."""
-        # --- Toolbar ---
-        self._tao_toolbar()
+        lbl_title = ttk.Label(main_frame, text="🚀 AUTOPOST MINI CONTROL", font=("Segoe UI", 10, "bold"), foreground="#3b82f6")
+        lbl_title.pack(anchor=tk.W, pady=(0, 2))
 
-        # --- Spreadsheet (bảng lưới) ---
-        self._tao_spreadsheet()
+        self.lbl_status = ttk.Label(main_frame, text="Trạng thái: Sẵn sàng", font=("Segoe UI", 9), foreground="#34d399")
+        self.lbl_status.pack(anchor=tk.W, pady=(0, 8))
 
-        # --- Log Panel ---
-        self._tao_log_panel()
+        log_frame = ttk.Frame(main_frame)
+        log_frame.pack(fill=tk.X, expand=True, pady=(0, 10))
+        self.lbl_mini_log = ttk.Label(log_frame, text="Sẵn sàng thực hiện nhiệm vụ...", font=("Consolas", 8), foreground="#a3a3a3", wraplength=290, justify=tk.LEFT)
+        self.lbl_mini_log.pack(anchor=tk.W, fill=tk.X)
 
-    def _tao_toolbar(self):
-        """Tạo thanh công cụ phía trên."""
-        toolbar = ttk.Frame(self.root, padding=(10, 5))
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.pack(fill=tk.X, side=tk.BOTTOM)
+
+        self.btn_dang = ttk.Button(btn_frame, text="▶️ Bắt đầu đăng", command=self._bat_dau_dang, style="Accent.TButton")
+        self.btn_dang.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
+
+        btn_quan_ly = ttk.Button(btn_frame, text="⚙️ Quản lý bài đăng", command=self._mo_giao_dien_quan_ly)
+        btn_quan_ly.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(4, 0))
+
+    def _show_custom_dialog(self, title, message, type_dialog="info"):
+        """
+        Hiển thị hộp thoại tùy chỉnh của riêng ứng dụng.
+        Tự động định vị ở trên cùng và thẳng đứng ngay bên dưới cửa sổ tool chính (góc trên bên phải).
+        """
+        dialog = tk.Toplevel(self.root)
+        dialog.title(title)
+        dialog.attributes("-topmost", True)
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Lấy vị trí hiện tại của tool
+        tool_x = self.root.winfo_x()
+        tool_y = self.root.winfo_y()
+        tool_w = self.root.winfo_width()
+        tool_h = self.root.winfo_height()
+
+        dlg_w = 400
+        dlg_h = 320
+
+        # Căn lề phải của dialog trùng với lề phải của tool
+        x = tool_x + tool_w - dlg_w
+        # Đặt ngay bên dưới tool
+        y = tool_y + tool_h + 15
+
+        # Đảm bảo không trôi khỏi màn hình
+        screen_w = dialog.winfo_screenwidth()
+        screen_h = dialog.winfo_screenheight()
+
+        if x < 0:
+            x = 10
+        if x + dlg_w > screen_w:
+            x = screen_w - dlg_w - 10
+        if y + dlg_h > screen_h - 50:
+            y = tool_y - dlg_h - 15
+        if y < 0:
+            y = 10
+
+        dialog.geometry(f"{dlg_w}x{dlg_h}+{x}+{y}")
+
+        frame = ttk.Frame(dialog, padding=15)
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        lbl_title = ttk.Label(frame, text=title, font=("Segoe UI", 11, "bold"))
+        lbl_title.pack(anchor=tk.W, pady=(0, 10))
+
+        lbl_msg = ttk.Label(frame, text=message, wraplength=370, justify=tk.LEFT, font=("Segoe UI", 9))
+        lbl_msg.pack(anchor=tk.W, fill=tk.BOTH, expand=True, pady=(0, 10))
+
+        result = {"value": False}
+
+        def on_ok():
+            result["value"] = True
+            dialog.destroy()
+
+        def on_cancel():
+            result["value"] = False
+            dialog.destroy()
+
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(anchor=tk.E, pady=(5, 0))
+
+        if type_dialog == "confirm":
+            btn_yes = ttk.Button(btn_frame, text="Đồng ý", command=on_ok, style="Accent.TButton")
+            btn_yes.pack(side=tk.LEFT, padx=(0, 10))
+            btn_no = ttk.Button(btn_frame, text="Hủy bỏ", command=on_cancel)
+            btn_no.pack(side=tk.LEFT)
+        else:
+            btn_ok = ttk.Button(btn_frame, text="OK", command=on_ok, style="Accent.TButton")
+            btn_ok.pack(side=tk.LEFT)
+
+        self.root.wait_window(dialog)
+        return result["value"]
+
+    def _mo_giao_dien_quan_ly(self):
+        """Mở cửa sổ lớn để quản lý, chỉnh sửa danh sách bài đăng."""
+        if self.editor_win is not None and self.editor_win.winfo_exists():
+            self.editor_win.focus_force()
+            return
+
+        self.editor_win = tk.Toplevel(self.root)
+        self.editor_win.title(WINDOW_TITLE)
+        self.editor_win.geometry(WINDOW_SIZE)
+        self.editor_win.minsize(MIN_WIDTH, MIN_HEIGHT)
+
+        # Cấu hình đóng cửa sổ: lưu dữ liệu
+        self.editor_win.protocol("WM_DELETE_WINDOW", self._dong_editor)
+
+        # Tạo thanh công cụ trên cửa sổ lớn
+        toolbar = ttk.Frame(self.editor_win, padding=(10, 5))
         toolbar.pack(fill=tk.X)
 
-        # Nút bên trái
         left_frame = ttk.Frame(toolbar)
         left_frame.pack(side=tk.LEFT)
 
@@ -89,17 +213,8 @@ class AutoPostGUI:
         ttk.Button(left_frame, text="📂 Chọn Media", command=self._chon_media).pack(side=tk.LEFT, padx=(15, 5))
         ttk.Button(left_frame, text="💾 Lưu", command=self._luu_du_lieu).pack(side=tk.LEFT, padx=(0, 5))
 
-        # Nút bên phải
-        right_frame = ttk.Frame(toolbar)
-        right_frame.pack(side=tk.RIGHT)
-
-        self.btn_dang = ttk.Button(right_frame, text="▶️ Bắt đầu đăng",
-                                    command=self._bat_dau_dang, style="Accent.TButton")
-        self.btn_dang.pack(side=tk.RIGHT)
-
-    def _tao_spreadsheet(self):
-        """Tạo bảng lưới spreadsheet (tksheet)."""
-        sheet_frame = ttk.Frame(self.root)
+        # --- Spreadsheet (bảng lưới) ---
+        sheet_frame = ttk.Frame(self.editor_win)
         sheet_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 0))
 
         self.sheet = tksheet.Sheet(
@@ -111,7 +226,6 @@ class AutoPostGUI:
         )
         self.sheet.pack(fill=tk.BOTH, expand=True)
 
-        # Cấu hình bảng
         self.sheet.enable_bindings((
             "single_select",
             "row_select",
@@ -131,22 +245,53 @@ class AutoPostGUI:
             "edit_cell",
         ))
 
-        # Độ rộng cột mặc định
-        self.sheet.column_width(column=0, width=120)   # Mã bài
-        self.sheet.column_width(column=1, width=280)   # Link nhóm FB
-        self.sheet.column_width(column=2, width=300)   # Caption
-        self.sheet.column_width(column=3, width=220)   # Ảnh/Video
-        self.sheet.column_width(column=4, width=140)   # Status
-        self.sheet.column_width(column=5, width=60)    # Chọn
+        self.sheet.column_width(column=0, width=120)
+        self.sheet.column_width(column=1, width=280)
+        self.sheet.column_width(column=2, width=300)
+        self.sheet.column_width(column=3, width=220)
+        self.sheet.column_width(column=4, width=140)
+        self.sheet.column_width(column=5, width=60)
 
-        # Cột Status chỉ đọc (cột Chọn KHÔNG để readonly để code có thể set_cell_data, thay vào đó chặn sửa ô bằng begin_edit_cell)
         self.sheet.readonly_columns(columns=[4])
-
-        # Bind sự kiện chặn soạn thảo cột Chọn
         self.sheet.extra_bindings("begin_edit_cell", self._begin_edit_cell)
-
-        # Bind sự kiện double click vào ô để tự động đảo Chọn (cột 5)
         self.sheet.extra_bindings("double_click_left_click", self._double_click_sheet)
+
+        # --- Log Panel ---
+        log_frame = ttk.LabelFrame(self.editor_win, text="📋 Log", padding=(5, 5))
+        log_frame.pack(fill=tk.X, padx=10, pady=(5, 10))
+
+        self.log_text = tk.Text(log_frame, height=8, wrap=tk.WORD,
+                                bg="#1e1e1e", fg="#d4d4d4",
+                                font=("Consolas", 10),
+                                insertbackground="#ffffff",
+                                selectbackground="#264f78",
+                                relief=tk.FLAT, padx=8, pady=5)
+        self.log_text.pack(fill=tk.X, expand=True)
+
+        scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_text.yview)
+        self.log_text.configure(yscrollcommand=scrollbar.set)
+        self.log_text.configure(state=tk.DISABLED)
+
+        # Nạp dữ liệu hiện tại từ bộ nhớ
+        self._hien_thi_du_lieu_tu_bo_nho()
+
+    def _hien_thi_du_lieu_tu_bo_nho(self):
+        if self.sheet is not None:
+            data = []
+            for p in self.posts_in_memory:
+                row = [p.get(k, "") for k in COL_KEYS]
+                data.append(row)
+            self.sheet.set_sheet_data(data)
+            self.sheet.refresh()
+
+    def _dong_editor(self):
+        # Lưu dữ liệu từ bảng editor về bộ nhớ trước khi đóng
+        self._luu_du_lieu()
+        self.sheet = None
+        self.log_text = None
+        if self.editor_win is not None:
+            self.editor_win.destroy()
+            self.editor_win = None
 
     def _begin_edit_cell(self, event = None):
         """Chặn người dùng sửa thủ công cột Chọn (cột 5)."""
@@ -169,7 +314,6 @@ class AutoPostGUI:
     def _double_click_sheet(self, event = None):
         """Khi người dùng double click vào cột Chọn, tự động toggle trạng thái giữa ✅ và trống."""
         try:
-            # Lấy dòng và cột từ sự kiện double click (hỗ trợ nhiều định dạng tksheet khác nhau)
             row, col = None, None
             if event is not None:
                 if hasattr(event, "row") and hasattr(event, "column"):
@@ -179,7 +323,6 @@ class AutoPostGUI:
                 elif isinstance(event, (list, tuple)) and len(event) >= 2:
                     row, col = event[0], event[1]
 
-            # Fallback nếu không lấy được từ event
             if row is None or col is None:
                 selected = self.sheet.get_currently_selected()
                 if selected is not None:
@@ -191,73 +334,42 @@ class AutoPostGUI:
             if row is not None and col == 5:  # Cột Chọn (0-indexed)
                 val = self.sheet.get_cell_data(row, col)
                 current = "" if val is None else str(val).strip()
-                # Đảo trạng thái: Nếu đang là ✅ thì bỏ đi, ngược lại nếu rỗng/None/nan thì tích ✅
                 new_val = "" if current in ("✅", "None", "nan") else "✅"
                 self.sheet.set_cell_data(row, col, new_val)
                 self.sheet.refresh()
         except Exception as e:
             self._ghi_log(f"Lỗi nhấp đúp ô: {e}")
 
-    def _safe_dialog_accept(self, dialog):
-        """Bắt và chấp nhận Dialog một cách an toàn để tránh TargetClosedError khi đóng trang."""
-        try:
-            dialog.accept()
-        except Exception:
-            pass
-
-    def _tao_log_panel(self):
-        """Tạo panel log bên dưới."""
-        log_frame = ttk.LabelFrame(self.root, text="📋 Log", padding=(5, 5))
-        log_frame.pack(fill=tk.X, padx=10, pady=(5, 10))
-
-        self.log_text = tk.Text(log_frame, height=8, wrap=tk.WORD,
-                                bg="#1e1e1e", fg="#d4d4d4",
-                                font=("Consolas", 10),
-                                insertbackground="#ffffff",
-                                selectbackground="#264f78",
-                                relief=tk.FLAT, padx=8, pady=5)
-        self.log_text.pack(fill=tk.X, expand=True)
-
-        scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_text.yview)
-        self.log_text.configure(yscrollcommand=scrollbar.set)
-
-        self.log_text.configure(state=tk.DISABLED)
-
-    # ═══════════════════════════════════════════════════════════
-    # QUẢN LÝ DỮ LIỆU
-    # ═══════════════════════════════════════════════════════════
-
     def _tai_du_lieu(self):
-        """Tải dữ liệu từ file JSON vào bảng lưới."""
+        """Tải dữ liệu từ file JSON vào bộ nhớ."""
         posts = doc_posts()
         if not posts:
-            # Tạo 3 dòng trống mặc định
             posts = [tao_bai_moi() for _ in range(3)]
-
-        data = []
-        for p in posts:
-            row = [p.get(k, "") for k in COL_KEYS]
-            data.append(row)
-
-        self.sheet.set_sheet_data(data)
+        self.posts_in_memory = posts
         self._ghi_log("✅ Đã tải dữ liệu thành công.")
 
     def _lay_du_lieu_tu_bang(self) -> list[dict]:
-        """Đọc toàn bộ dữ liệu từ bảng lưới thành list[dict]."""
-        data = self.sheet.get_sheet_data()
-        posts = []
-        for row in data:
-            # Bỏ qua dòng hoàn toàn trống
-            if all(str(cell).strip() == "" for cell in row):
-                continue
-            post = {}
-            for i, key in enumerate(COL_KEYS):
-                post[key] = str(row[i]).strip() if i < len(row) else ""
-            posts.append(post)
-        return posts
+        """Đọc dữ liệu từ bảng lưới (nếu đang mở) hoặc trả về bộ nhớ đệm."""
+        if self.sheet is None:
+            return self.posts_in_memory
+
+        try:
+            data = self.sheet.get_sheet_data()
+            posts = []
+            for row in data:
+                if all(str(cell).strip() == "" for cell in row):
+                    continue
+                post = {}
+                for i, key in enumerate(COL_KEYS):
+                    post[key] = str(row[i]).strip() if i < len(row) else ""
+                posts.append(post)
+            self.posts_in_memory = posts
+            return posts
+        except Exception:
+            return self.posts_in_memory
 
     def _luu_du_lieu(self):
-        """Lưu dữ liệu từ bảng lưới vào file JSON."""
+        """Lưu dữ liệu từ bộ nhớ vào file JSON."""
         posts = self._lay_du_lieu_tu_bang()
         ghi_posts(posts)
         self._ghi_log(f"💾 Đã lưu {len(posts)} bài đăng.")
@@ -268,6 +380,8 @@ class AutoPostGUI:
 
     def _them_dong(self):
         """Thêm một dòng trống vào cuối bảng sử dụng thao tác mảng (Độc lập phiên bản)."""
+        if self.sheet is None:
+            return
         try:
             data = self.sheet.get_sheet_data()
             new_row = ["", "", "", "", "", "✅"]
@@ -276,17 +390,19 @@ class AutoPostGUI:
             self.sheet.refresh()
             self._ghi_log("➕ Đã thêm 1 dòng trống mới.")
         except Exception as e:
-            messagebox.showerror("Lỗi", f"Không thể thêm dòng: {e}")
+            self._show_custom_dialog("Lỗi", f"Không thể thêm dòng: {e}")
 
     def _xoa_dong(self):
         """Xóa các dòng đang được chọn sử dụng thao tác mảng (Độc lập phiên bản)."""
+        if self.sheet is None:
+            return
         try:
             selected = self.sheet.get_selected_rows()
             if not selected:
-                messagebox.showwarning("Chưa chọn dòng", "Hãy chọn ít nhất 1 dòng để xóa.")
+                self._show_custom_dialog("Chưa chọn dòng", "Hãy chọn ít nhất 1 dòng để xóa.")
                 return
 
-            if messagebox.askyesno("Xác nhận xóa", f"Bạn có chắc muốn xóa {len(selected)} dòng?"):
+            if self._show_custom_dialog("Xác nhận xóa", f"Bạn có chắc muốn xóa {len(selected)} dòng?", "confirm"):
                 data = self.sheet.get_sheet_data()
                 # Xóa từ dưới lên để tránh lệch index
                 for row_idx in sorted(selected, reverse=True):
@@ -296,13 +412,15 @@ class AutoPostGUI:
                 self.sheet.refresh()
                 self._ghi_log(f"🗑️ Đã xóa {len(selected)} dòng.")
         except Exception as e:
-            messagebox.showerror("Lỗi", f"Không thể xóa dòng: {e}")
+            self._show_custom_dialog("Lỗi", f"Không thể xóa dòng: {e}")
 
     def _chon_media(self):
         """Mở hộp thoại thiết kế mới tùy chỉnh 3 nút bằng tiếng Việt thay thế cho askyesnocancel."""
+        if self.sheet is None:
+            return
         selected = self.sheet.get_currently_selected()
         if selected is None:
-            messagebox.showinfo("Hướng dẫn",
+            self._show_custom_dialog("Hướng dẫn",
                                 "Hãy click vào ô 'Ảnh/Video' của dòng cần chọn media trước,\n"
                                 "sau đó bấm nút '📂 Chọn Media'.")
             return
@@ -310,7 +428,7 @@ class AutoPostGUI:
         try:
             row = selected.row
         except AttributeError:
-            messagebox.showinfo("Hướng dẫn", "Hãy click vào 1 ô cụ thể trên bảng trước.")
+            self._show_custom_dialog("Hướng dẫn", "Hãy click vào 1 ô cụ thể trên bảng trước.")
             return
 
         # Tạo Custom TopLevel window để hiển thị 3 nút chuẩn Việt
@@ -386,7 +504,7 @@ class AutoPostGUI:
     def _bat_dau_dang(self):
         """Bắt đầu tiến trình đăng bài."""
         if self.dang_chay:
-            messagebox.showwarning("Đang chạy", "Tiến trình đăng bài đang chạy. Vui lòng đợi hoàn tất.")
+            self._show_custom_dialog("Đang chạy", "Tiến trình đăng bài đang chạy. Vui lòng đợi hoàn tất.")
             return
 
         # Lưu dữ liệu trước
@@ -399,7 +517,7 @@ class AutoPostGUI:
                            and p.get('chon', '').strip() != '']
 
         if not posts_duoc_chon:
-            messagebox.showinfo("Thông báo", "Không có bài đăng nào được chọn để đăng.\n"
+            self._show_custom_dialog("Thông báo", "Không có bài đăng nào được chọn để đăng.\n"
                                              "Vui lòng điền ký tự bất kỳ hoặc tích chọn (✅) vào cột 'Chọn' của dòng cần đăng.")
             return
 
@@ -410,23 +528,23 @@ class AutoPostGUI:
             links = tach_danh_sach(p.get('links', ''))
             tong_so_cua_so += len(links)
 
-        confirm = messagebox.askyesno(
+        confirm = self._show_custom_dialog(
             "Xác nhận đăng bài hàng loạt",
             f"Hệ thống sẽ chuẩn bị SONG SONG {tong_so_cua_so} cửa sổ trình duyệt cho {len(posts_duoc_chon)} bài viết được chọn.\n\n"
-            "Quy trình thực hiện:\n"
-            "  1. Trình duyệt chính mở lên: Bạn đăng nhập Facebook (nếu cần) rồi click [OK] để lưu phiên đăng nhập.\n"
-            "  2. Hệ thống nhân bản profile và mở song song {tong_so_cua_so} cửa sổ chuẩn bị toàn bộ các bài viết cùng lúc.\n"
-            "  3. Bạn đi một vòng bấm 'Đăng' trên từng cửa sổ.\n"
-            "  4. Click [OK] trên GUI để hoàn tất và tự động dọn dẹp các cửa sổ.\n\n"
-            "Bắt đầu?",
-            parent=self.root
+            f"Quy trình thực hiện:\n"
+            f"  1. Trình duyệt chính mở lên: Bạn đăng nhập Facebook (nếu cần) rồi click [OK] để lưu phiên đăng nhập.\n"
+            f"  2. Hệ thống nhân bản profile và mở song song {tong_so_cua_so} cửa sổ chuẩn bị toàn bộ các bài viết cùng lúc.\n"
+            f"  3. Bạn đi một vòng bấm 'Đăng' trên từng cửa sổ.\n"
+            f"  4. Click [OK] trên GUI để hoàn tất và tự động dọn dẹp các cửa sổ.\n\n"
+            f"Bắt đầu?",
+            "confirm"
         )
 
         if not confirm:
             return
 
         self.dang_chay = True
-        self.btn_dang.configure(text="⏳ Đang chuẩn bị...", state=tk.DISABLED)
+        self.btn_dang.configure(text="⏳ Đang chạy...", state=tk.DISABLED)
         self._ghi_log("🚀 Bắt đầu tiến trình chuẩn bị đăng bài hàng loạt...")
 
         # Chạy trên thread riêng để GUI không bị đơ
@@ -479,17 +597,31 @@ class AutoPostGUI:
                 self._ghi_log_safe("❌ Không tìm thấy liên kết nhóm nào hợp lệ để đăng.")
                 return
 
+            # Xóa file lock của Chromium nếu có để tránh lỗi mở trình duyệt chính
+            if os.path.exists(SESSION_DIR):
+                for file_name in ("SingletonLock", "lockfile"):
+                    lock_file = os.path.join(SESSION_DIR, file_name)
+                    if os.path.exists(lock_file):
+                        try:
+                            os.remove(lock_file)
+                        except Exception:
+                            pass
+
             # BƯỚC 1: Mở trình duyệt chính một lần duy nhất để người dùng đăng nhập/kiểm tra phiên đăng nhập
             self._ghi_log_safe("🌐 Đang mở trình duyệt chính để xác nhận đăng nhập Facebook...")
             with sync_playwright() as p:
                 context = p.chromium.launch_persistent_context(
                     user_data_dir=SESSION_DIR,
                     headless=False,
-                    viewport={'width': 1100, 'height': 800},
+                    no_viewport=True,
+                    channel="chrome",  # Sử dụng Chrome thật trên máy để tránh bot detection
+                    ignore_default_args=["--enable-automation"],
                     locale='vi-VN',
                     args=[
                         '--disable-blink-features=AutomationControlled',
                         '--no-sandbox',
+                        '--start-maximized',
+                        '--disable-infobars',
                     ]
                 )
                 page = context.pages[0] if context.pages else context.new_page()
@@ -505,7 +637,10 @@ class AutoPostGUI:
                 self._cho_dang_nhap_event.wait()
 
                 # Đóng trình duyệt chính để lưu session sạch
-                context.close()
+                try:
+                    context.close()
+                except Exception:
+                    pass
                 self._ghi_log_safe("🔒 Đã lưu phiên đăng nhập chính thành công.")
 
             # BƯỚC 2: Khởi chạy song song các luồng (mỗi luồng một trình duyệt riêng)
@@ -590,23 +725,6 @@ class AutoPostGUI:
         stt = task['stt']
         tong = task['tong']
 
-        self._ghi_log_safe(f"➡️ Cửa sổ {task_idx}/{total_tasks}: Đang mở trình duyệt cho [{ma_bai}] Nhóm {stt}/{tong}...")
-        self._cap_nhat_status_bang(ma_bai, "ĐANG CHUẨN BỊ...")
-
-        # Tạo thư mục session tạm thời cho luồng này để tránh xung đột SingletonLock của Chromium
-        temp_session = f"{SESSION_DIR}_temp_{task_idx}"
-        temp_dirs.append(temp_session)
-        os.makedirs(temp_session, exist_ok=True)
-        if os.path.exists(SESSION_DIR):
-            try:
-                shutil.copytree(SESSION_DIR, temp_session, dirs_exist_ok=True)
-                # Xóa file lock của Chromium nếu có
-                lock_file = os.path.join(temp_session, "SingletonLock")
-                if os.path.exists(lock_file):
-                    os.remove(lock_file)
-            except Exception as e_copy:
-                self._ghi_log_safe(f"⚠️ Cảnh báo copy profile: {e_copy}")
-
         try:
             self._ghi_log_safe(f"➡️ Cửa sổ {task_idx}/{total_tasks}: Đang mở trình duyệt cho [{ma_bai}] Nhóm {stt}/{tong}...")
             self._cap_nhat_status_bang(ma_bai, "ĐANG CHUẨN BỊ...")
@@ -619,9 +737,10 @@ class AutoPostGUI:
                 try:
                     shutil.copytree(SESSION_DIR, temp_session, dirs_exist_ok=True)
                     # Xóa file lock của Chromium nếu có
-                    lock_file = os.path.join(temp_session, "SingletonLock")
-                    if os.path.exists(lock_file):
-                        os.remove(lock_file)
+                    for file_name in ("SingletonLock", "lockfile"):
+                        lock_file = os.path.join(temp_session, file_name)
+                        if os.path.exists(lock_file):
+                            os.remove(lock_file)
                 except Exception as e_copy:
                     self._ghi_log_safe(f"⚠️ Cảnh báo copy profile: {e_copy}")
 
@@ -631,11 +750,15 @@ class AutoPostGUI:
                     context = p.chromium.launch_persistent_context(
                         user_data_dir=temp_session,
                         headless=False,
-                        viewport={'width': 1000, 'height': 750},
+                        no_viewport=True,
+                        channel="chrome",  # Sử dụng Chrome thật để tránh bot detection
+                        ignore_default_args=["--enable-automation"],
                         locale='vi-VN',
                         args=[
                             '--disable-blink-features=AutomationControlled',
                             '--no-sandbox',
+                            '--start-maximized',
+                            '--disable-infobars',
                         ]
                     )
                     page = context.pages[0] if context.pages else context.new_page()
@@ -668,7 +791,10 @@ class AutoPostGUI:
                     task['event_cho_dang'].wait()
 
                     # Đóng trình duyệt
-                    context.close()
+                    try:
+                        context.close()
+                    except Exception:
+                        pass
 
             except Exception as e:
                 self._ghi_log_safe(f"❌ Lỗi khởi động trình duyệt ở cửa sổ {task_idx} ([{ma_bai}]): {e}")
@@ -741,24 +867,22 @@ class AutoPostGUI:
 
     def _hien_thi_cho_dang_nhap_dialog(self):
         """Hiện thông báo chờ đăng nhập tích hợp trực tiếp trên giao diện GUI."""
-        messagebox.showinfo(
+        self._show_custom_dialog(
             "Xác thực Facebook",
             "Trình duyệt đã được mở tới trang Facebook.\n\n"
             "1. Hãy đăng nhập tài khoản Facebook của bạn (nếu cần).\n"
             "2. Sau khi đã vào được trang chủ (Bảng tin) Facebook thành công,\n"
-            "   hãy bấm [OK] dưới đây để hệ thống bắt đầu tự động chuẩn bị các tab đăng bài!",
-            parent=self.root
+            "   hãy bấm [OK] dưới đây để hệ thống bắt đầu tự động chuẩn bị các tab đăng bài!"
         )
         self._cho_dang_nhap_event.set()
 
     def _hien_thi_cho_dang_dialog(self, count: int):
         """Hiện thông báo chờ người dùng bấm Đăng trên tất cả các tab."""
-        messagebox.showinfo(
+        self._show_custom_dialog(
             "Xác nhận đã Đăng bài",
             f"Đã chuẩn bị xong {count} cửa sổ trình duyệt song song cho các bài viết được chọn.\n\n"
             "👉 Hãy chuyển qua các cửa sổ trình duyệt, kiểm tra và bấm nút 'Đăng' trên từng cửa sổ.\n"
-            "👉 Sau khi đã bấm Đăng XONG HẾT, click nút [OK] ở đây để hoàn tất và đóng toàn bộ.",
-            parent=self.root
+            "👉 Sau khi đã bấm Đăng XONG HẾT, click nút [OK] ở đây để hoàn tất và đóng toàn bộ."
         )
         self._cho_bam_dang_event.set()
 
@@ -767,29 +891,65 @@ class AutoPostGUI:
     # ═══════════════════════════════════════════════════════════
 
     def _ghi_log(self, message: str):
-        """Ghi log vào panel (chạy trên GUI thread)."""
-        timestamp = time.strftime("%H:%M:%S")
-        self.log_text.configure(state=tk.NORMAL)
-        self.log_text.insert(tk.END, f"[{timestamp}]  {message}\n")
-        self.log_text.see(tk.END)
-        self.log_text.configure(state=tk.DISABLED)
+        """Ghi log vào terminal, nhãn mini và panel log lớn (nếu mở)."""
+        print(message)
+        
+        # Cập nhật nhãn mini trên GUI chính
+        clean_msg = message
+        for prefix in ["✅", "❌", "⚠️", "🚀", "💾", "➕", "🗑️", "📂", "🔔", "🧹", "🏁", "🎉", "⏳", "➡️", "🌐", "🔒", "📱"]:
+            clean_msg = clean_msg.replace(prefix, "").strip()
+        
+        try:
+            self.lbl_mini_log.configure(text=clean_msg)
+        except Exception:
+            pass
+
+        # Cập nhật log panel trên editor lớn nếu đang mở
+        if self.log_text is not None:
+            try:
+                timestamp = time.strftime("%H:%M:%S")
+                self.log_text.configure(state=tk.NORMAL)
+                self.log_text.insert(tk.END, f"[{timestamp}]  {message}\n")
+                self.log_text.see(tk.END)
+                self.log_text.configure(state=tk.DISABLED)
+            except Exception:
+                pass
 
     def _ghi_log_safe(self, message: str):
         """Ghi log thread-safe (gọi từ thread khác GUI)."""
         self.root.after(0, lambda: self._ghi_log(message))
 
     def _cap_nhat_status_bang(self, ma_bai: str, status: str):
-        """Cập nhật cột Status trên bảng lưới theo mã bài."""
-        def _update():
-            data = self.sheet.get_sheet_data()
-            ma_col = COL_KEYS.index("ma_bai")
-            status_col = COL_KEYS.index("status")
-            for row_idx, row in enumerate(data):
-                if str(row[ma_col]).strip() == ma_bai.strip():
-                    self.sheet.set_cell_data(row_idx, status_col, status)
-                    break
-            self.sheet.refresh()
-        self.root.after(0, _update)
+        """Cập nhật trạng thái trên bảng lưới (nếu mở) và trong bộ nhớ."""
+        # Cập nhật trong bộ nhớ trước
+        for p in self.posts_in_memory:
+            if p.get("ma_bai", "").strip() == ma_bai.strip():
+                p["status"] = status
+                break
+        
+        # Cập nhật status label ở mini dashboard
+        try:
+            self.lbl_status.configure(text=f"Trạng thái: {status}")
+        except Exception:
+            pass
+
+        # Cập nhật sheet nếu đang mở
+        if self.sheet is not None:
+            def _update():
+                try:
+                    if self.sheet is None:
+                        return
+                    data = self.sheet.get_sheet_data()
+                    ma_col = COL_KEYS.index("ma_bai")
+                    status_col = COL_KEYS.index("status")
+                    for row_idx, row in enumerate(data):
+                        if str(row[ma_col]).strip() == ma_bai.strip():
+                            self.sheet.set_cell_data(row_idx, status_col, status)
+                            break
+                    self.sheet.refresh()
+                except Exception:
+                    pass
+            self.root.after(0, _update)
 
     def chay(self):
         """Khởi chạy vòng lặp chính của GUI."""
@@ -800,8 +960,7 @@ class AutoPostGUI:
     def _dong_ung_dung(self):
         """Xử lý khi đóng cửa sổ."""
         if self.dang_chay:
-            if not messagebox.askyesno("Đang chạy",
-                                       "Tiến trình đăng bài đang chạy.\nBạn có chắc muốn thoát?"):
+            if not self._show_custom_dialog("Đang chạy", "Tiến trình đăng bài đang chạy.\nBạn có chắc muốn thoát?", "confirm"):
                 return
 
         # Auto-save khi đóng
