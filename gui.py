@@ -248,7 +248,8 @@ class AutoPostGUI:
         tool_h = self.root.winfo_height()
 
         dlg_w = 400
-        dlg_h = 320
+        # Nâng chiều cao lên 380 để không bao giờ bị tràn chữ che mất nút
+        dlg_h = 380
 
         # Căn lề phải của dialog trùng với lề phải của tool
         x = tool_x + tool_w - dlg_w
@@ -277,12 +278,17 @@ class AutoPostGUI:
         container = tk.Frame(card, bg="#101726")
         container.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
 
+        # 1. Pack Title
         lbl_title = tk.Label(container, text=title, font=("Segoe UI", 11, "bold"), fg="#8b5cf6", bg="#101726")
         lbl_title.pack(anchor=tk.W, pady=(0, 10))
 
-        # Message container với màu tối hơn
+        # 2. Pack Button Frame ở BOTTOM trước để cố định vị trí dưới cùng
+        btn_frame = tk.Frame(container, bg="#101726")
+        btn_frame.pack(side=tk.BOTTOM, anchor=tk.E, pady=(10, 0))
+
+        # 3. Pack Message container điền vào phần giữa còn lại
         msg_bg = tk.Frame(container, bg="#0b0f19", padx=10, pady=8)
-        msg_bg.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        msg_bg.pack(fill=tk.BOTH, expand=True)
 
         lbl_msg = tk.Label(msg_bg, text=message, wraplength=330, justify=tk.LEFT, font=("Segoe UI", 9), fg="#e2e8f0", bg="#0b0f19")
         lbl_msg.pack(anchor=tk.W, fill=tk.BOTH, expand=True)
@@ -296,9 +302,6 @@ class AutoPostGUI:
         def on_cancel():
             result["value"] = False
             dialog.destroy()
-
-        btn_frame = tk.Frame(container, bg="#101726")
-        btn_frame.pack(anchor=tk.E, pady=(5, 0))
 
         if type_dialog == "confirm":
             btn_yes = GlassButton(btn_frame, text="Đồng ý", command=on_ok, bg_color="#8b5cf6", hover_bg="#a855f7", active_bg="#7c3aed")
