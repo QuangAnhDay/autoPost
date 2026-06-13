@@ -43,6 +43,113 @@ from core.data_manager import doc_posts, ghi_posts, tao_bai_moi, posts_to_datafr
 from core.data_manager import cap_nhat_status_json
 
 # ═══════════════════════════════════════════════════════════════
+# WINDOWS GLASSMORPHISM UTILITIES & CUSTOM WIDGETS
+# ═══════════════════════════════════════════════════════════════
+import ctypes
+from ctypes import windll, c_int, byref, Structure, sizeof
+
+class ACCENT_POLICY(Structure):
+    _fields_ = [
+        ("AccentState", c_int),
+        ("AccentFlags", c_int),
+        ("GradientColor", c_int),
+        ("AnimationId", c_int)
+    ]
+
+class WINDOWCOMPOSITIONATTRIBDATA(Structure):
+    _fields_ = [
+        ("Attribute", c_int),
+        ("Data", ctypes.c_void_p),
+        ("SizeOfData", ctypes.c_size_t)
+    ]
+
+def ap_dung_glassmorphism(window, is_dark=True):
+    """Áp dụng hiệu ứng Acrylic/Aero Blur phía sau cửa sổ trên Windows."""
+    if not sys.platform.startswith("win"):
+        return
+    try:
+        window.update()
+        hwnd = window.winfo_id()
+        
+        accent = ACCENT_POLICY()
+        accent.AccentState = 3  # ACCENT_ENABLE_BLURBEHIND
+        accent.AccentFlags = 2
+        # Màu nền ABGR: 0xE6160F0B (90% opacity tối màu) giúp chữ hiển thị rõ nét
+        accent.GradientColor = 0xE6160F0B if is_dark else 0xE6FFFFFF
+        
+        data = WINDOWCOMPOSITIONATTRIBDATA()
+        data.Attribute = 19  # WCA_ACCENT_POLICY
+        data.Data = ctypes.cast(byref(accent), ctypes.c_void_p)
+        data.SizeOfData = sizeof(accent)
+        
+        windll.user32.SetWindowCompositionAttribute(hwnd, byref(data))
+    except Exception:
+        pass
+
+
+class GlassCard(tk.Canvas):
+    """Thẻ chứa giao diện dạng kính mờ (Glassmorphism card) bo góc có viền màu sắc."""
+    def __init__(self, parent, bg_color="#101726", border_color="#1e293b", radius=14, **kwargs):
+        kwargs["highlightthickness"] = 0
+        kwargs["bd"] = 0
+        kwargs["bg"] = parent.cget("bg") if hasattr(parent, "cget") else "#0a0e17"
+        super().__init__(parent, **kwargs)
+        self.bg_color = bg_color
+        self.border_color = border_color
+        self.radius = radius
+        self.bind("<Configure>", self._draw)
+
+    def _draw(self, event=None):
+        self.delete("all")
+        w = self.winfo_width()
+        h = self.winfo_height()
+        r = self.radius
+        if w > 10 and h > 10:
+            self.create_rounded_rect(2, 2, w-2, h-2, r, fill=self.bg_color, outline=self.border_color, width=1.5)
+
+    def create_rounded_rect(self, x1, y1, x2, y2, r, **kwargs):
+        points = [
+            x1+r, y1,
+            x2-r, y1,
+            x2, y1,
+            x2, y1+r,
+            x2, y2-r,
+            x2, y2,
+            x2-r, y2,
+            x1+r, y2,
+            x1, y2,
+            x1, y2-r,
+            x1, y1+r,
+            x1, y1
+        ]
+        return self.create_polygon(points, smooth=True, **kwargs)
+
+
+class GlassButton(tk.Button):
+    """Nút bấm phẳng hiện đại hỗ trợ hiệu ứng hover và màu sắc gradient/neon."""
+    def __init__(self, parent, text, command, bg_color="#1e293b", fg_color="#f8fafc", hover_bg="#334155", active_bg="#0f172a", font=("Segoe UI", 9, "bold"), **kwargs):
+        super().__init__(
+            parent,
+            text=text,
+            command=command,
+            bg=bg_color,
+            fg=fg_color,
+            activebackground=active_bg,
+            activeforeground=fg_color,
+            font=font,
+            relief=tk.FLAT,
+            bd=0,
+            padx=12,
+            pady=6,
+            cursor="hand2",
+            **kwargs
+        )
+        self.bg_color = bg_color
+        self.hover_bg = hover_bg
+        self.bind("<Enter>", lambda e: self.config(bg=self.hover_bg))
+        self.bind("<Leave>", lambda e: self.config(bg=self.bg_color))
+
+# ═══════════════════════════════════════════════════════════════
 # CONSTANTS
 # ═══════════════════════════════════════════════════════════════
 COLUMNS = ["Mã bài", "Link nhóm FB", "Caption", "Ảnh/Video", "Status", "Chọn"]
@@ -85,27 +192,39 @@ class AutoPostGUI:
 
     def _tao_giao_dien_mini(self):
         """Tạo giao diện mini dashboard siêu gọn ở góc trên bên phải màn hình."""
-        main_frame = ttk.Frame(self.root, padding=12)
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        self.root.config(bg="#0a0e17")
+        ap_dung_glassmorphism(self.root)
 
-        lbl_title = ttk.Label(main_frame, text="🚀 AUTOPOST MINI CONTROL", font=("Segoe UI", 10, "bold"), foreground="#3b82f6")
+        # Sử dụng GlassCard bao phủ toàn bộ giao diện mini
+        self.card = GlassCard(self.root, bg_color="#101726", border_color="#1e293b", radius=14)
+        self.card.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+
+        # Thêm padding thực tế bên trong card
+        container = tk.Frame(self.card, bg="#101726")
+        container.pack(fill=tk.BOTH, expand=True, padx=12, pady=10)
+
+        lbl_title = tk.Label(container, text="🚀 AUTOPOST CONTROL PANEL", font=("Segoe UI", 9, "bold"), fg="#8b5cf6", bg="#101726")
         lbl_title.pack(anchor=tk.W, pady=(0, 2))
 
-        self.lbl_status = ttk.Label(main_frame, text="Trạng thái: Sẵn sàng", font=("Segoe UI", 9), foreground="#34d399")
-        self.lbl_status.pack(anchor=tk.W, pady=(0, 8))
+        self.lbl_status = tk.Label(container, text="Trạng thái: Sẵn sàng", font=("Segoe UI", 9, "bold"), fg="#10b981", bg="#101726")
+        self.lbl_status.pack(anchor=tk.W, pady=(0, 6))
 
-        log_frame = ttk.Frame(main_frame)
-        log_frame.pack(fill=tk.X, expand=True, pady=(0, 10))
-        self.lbl_mini_log = ttk.Label(log_frame, text="Sẵn sàng thực hiện nhiệm vụ...", font=("Consolas", 8), foreground="#a3a3a3", wraplength=290, justify=tk.LEFT)
+        # Log container dạng kính tối màu hơn
+        log_bg = tk.Frame(container, bg="#0b0f19", padx=8, pady=6)
+        log_bg.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+
+        self.lbl_mini_log = tk.Label(log_bg, text="Sẵn sàng thực hiện nhiệm vụ...", font=("Consolas", 8), fg="#94a3b8", bg="#0b0f19", wraplength=260, justify=tk.LEFT)
         self.lbl_mini_log.pack(anchor=tk.W, fill=tk.X)
 
-        btn_frame = ttk.Frame(main_frame)
+        btn_frame = tk.Frame(container, bg="#101726")
         btn_frame.pack(fill=tk.X, side=tk.BOTTOM)
 
-        self.btn_dang = ttk.Button(btn_frame, text="▶️ Bắt đầu đăng", command=self._bat_dau_dang, style="Accent.TButton")
+        # Nút Đăng neon tím
+        self.btn_dang = GlassButton(btn_frame, text="▶️ Bắt đầu đăng", command=self._bat_dau_dang, bg_color="#8b5cf6", hover_bg="#a855f7", active_bg="#7c3aed")
         self.btn_dang.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
 
-        btn_quan_ly = ttk.Button(btn_frame, text="⚙️ Quản lý bài đăng", command=self._mo_giao_dien_quan_ly)
+        # Nút Quản lý xám kính
+        btn_quan_ly = GlassButton(btn_frame, text="⚙️ Quản lý bài đăng", command=self._mo_giao_dien_quan_ly, bg_color="#1e293b", hover_bg="#334155", active_bg="#0f172a")
         btn_quan_ly.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(4, 0))
 
     def _show_custom_dialog(self, title, message, type_dialog="info"):
@@ -117,6 +236,8 @@ class AutoPostGUI:
         dialog.title(title)
         dialog.attributes("-topmost", True)
         dialog.resizable(False, False)
+        dialog.config(bg="#0a0e17")
+        ap_dung_glassmorphism(dialog)
         dialog.transient(self.root)
         dialog.grab_set()
 
@@ -149,14 +270,22 @@ class AutoPostGUI:
 
         dialog.geometry(f"{dlg_w}x{dlg_h}+{x}+{y}")
 
-        frame = ttk.Frame(dialog, padding=15)
-        frame.pack(fill=tk.BOTH, expand=True)
+        # Glassmorphism Card
+        card = GlassCard(dialog, bg_color="#101726", border_color="#1e293b", radius=14)
+        card.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
-        lbl_title = ttk.Label(frame, text=title, font=("Segoe UI", 11, "bold"))
+        container = tk.Frame(card, bg="#101726")
+        container.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+
+        lbl_title = tk.Label(container, text=title, font=("Segoe UI", 11, "bold"), fg="#8b5cf6", bg="#101726")
         lbl_title.pack(anchor=tk.W, pady=(0, 10))
 
-        lbl_msg = ttk.Label(frame, text=message, wraplength=370, justify=tk.LEFT, font=("Segoe UI", 9))
-        lbl_msg.pack(anchor=tk.W, fill=tk.BOTH, expand=True, pady=(0, 10))
+        # Message container với màu tối hơn
+        msg_bg = tk.Frame(container, bg="#0b0f19", padx=10, pady=8)
+        msg_bg.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+
+        lbl_msg = tk.Label(msg_bg, text=message, wraplength=330, justify=tk.LEFT, font=("Segoe UI", 9), fg="#e2e8f0", bg="#0b0f19")
+        lbl_msg.pack(anchor=tk.W, fill=tk.BOTH, expand=True)
 
         result = {"value": False}
 
@@ -168,16 +297,16 @@ class AutoPostGUI:
             result["value"] = False
             dialog.destroy()
 
-        btn_frame = ttk.Frame(frame)
+        btn_frame = tk.Frame(container, bg="#101726")
         btn_frame.pack(anchor=tk.E, pady=(5, 0))
 
         if type_dialog == "confirm":
-            btn_yes = ttk.Button(btn_frame, text="Đồng ý", command=on_ok, style="Accent.TButton")
+            btn_yes = GlassButton(btn_frame, text="Đồng ý", command=on_ok, bg_color="#8b5cf6", hover_bg="#a855f7", active_bg="#7c3aed")
             btn_yes.pack(side=tk.LEFT, padx=(0, 10))
-            btn_no = ttk.Button(btn_frame, text="Hủy bỏ", command=on_cancel)
+            btn_no = GlassButton(btn_frame, text="Hủy bỏ", command=on_cancel, bg_color="#1e293b", hover_bg="#334155", active_bg="#0f172a")
             btn_no.pack(side=tk.LEFT)
         else:
-            btn_ok = ttk.Button(btn_frame, text="OK", command=on_ok, style="Accent.TButton")
+            btn_ok = GlassButton(btn_frame, text="OK", command=on_ok, bg_color="#8b5cf6", hover_bg="#a855f7", active_bg="#7c3aed")
             btn_ok.pack(side=tk.LEFT)
 
         self.root.wait_window(dialog)
@@ -193,32 +322,39 @@ class AutoPostGUI:
         self.editor_win.title(WINDOW_TITLE)
         self.editor_win.geometry(WINDOW_SIZE)
         self.editor_win.minsize(MIN_WIDTH, MIN_HEIGHT)
+        self.editor_win.config(bg="#0a0e17")
+        ap_dung_glassmorphism(self.editor_win)
 
         # Cấu hình đóng cửa sổ: lưu dữ liệu
         self.editor_win.protocol("WM_DELETE_WINDOW", self._dong_editor)
 
         # Tạo thanh công cụ trên cửa sổ lớn
-        toolbar = ttk.Frame(self.editor_win, padding=(10, 5))
+        toolbar = tk.Frame(self.editor_win, bg="#0a0e17", padx=12, pady=8)
         toolbar.pack(fill=tk.X)
 
-        left_frame = ttk.Frame(toolbar)
+        left_frame = tk.Frame(toolbar, bg="#0a0e17")
         left_frame.pack(side=tk.LEFT)
 
-        ttk.Button(left_frame, text="➕ Thêm dòng", command=self._them_dong,
-                   style="Accent.TButton").pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(left_frame, text="🗑️ Xóa dòng", command=self._xoa_dong).pack(side=tk.LEFT, padx=(0, 5))
+        # Sử dụng các GlassButton với màu sắc đồng điệu của SaaS Dashboard
+        GlassButton(left_frame, text="➕ Thêm dòng", command=self._them_dong, bg_color="#8b5cf6", hover_bg="#a855f7", active_bg="#7c3aed").pack(side=tk.LEFT, padx=(0, 6))
+        GlassButton(left_frame, text="🗑️ Xóa dòng", command=self._xoa_dong, bg_color="#ef4444", hover_bg="#f87171", active_bg="#dc2626").pack(side=tk.LEFT, padx=(0, 6))
 
-        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+        # Một khoảng trống nhẹ phân cách thay cho Separator cổ điển
+        tk.Frame(left_frame, width=15, bg="#0a0e17").pack(side=tk.LEFT)
 
-        ttk.Button(left_frame, text="📂 Chọn Media", command=self._chon_media).pack(side=tk.LEFT, padx=(15, 5))
-        ttk.Button(left_frame, text="💾 Lưu", command=self._luu_du_lieu).pack(side=tk.LEFT, padx=(0, 5))
+        GlassButton(left_frame, text="📂 Chọn Media", command=self._chon_media, bg_color="#3b82f6", hover_bg="#60a5fa", active_bg="#2563eb").pack(side=tk.LEFT, padx=(0, 6))
+        GlassButton(left_frame, text="💾 Lưu", command=self._luu_du_lieu, bg_color="#10b981", hover_bg="#34d399", active_bg="#059669").pack(side=tk.LEFT, padx=(0, 6))
 
         # --- Spreadsheet (bảng lưới) ---
-        sheet_frame = ttk.Frame(self.editor_win)
-        sheet_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 0))
+        # Gói bảng lưới bên trong một GlassCard bo góc tuyệt đẹp
+        sheet_card = GlassCard(self.editor_win, bg_color="#101726", border_color="#1e293b", radius=14)
+        sheet_card.pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 0))
+
+        sheet_container = tk.Frame(sheet_card, bg="#101726")
+        sheet_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         self.sheet = tksheet.Sheet(
-            sheet_frame,
+            sheet_container,
             headers=COLUMNS,
             show_x_scrollbar=True,
             show_y_scrollbar=True,
@@ -256,19 +392,51 @@ class AutoPostGUI:
         self.sheet.extra_bindings("begin_edit_cell", self._begin_edit_cell)
         self.sheet.extra_bindings("double_click_left_click", self._double_click_sheet)
 
-        # --- Log Panel ---
-        log_frame = ttk.LabelFrame(self.editor_win, text="📋 Log", padding=(5, 5))
-        log_frame.pack(fill=tk.X, padx=10, pady=(5, 10))
+        # Thay đổi giao diện tksheet đồng bộ với màu kính
+        self.sheet.change_theme("dark blue")
+        try:
+            self.sheet.config(
+                background="#101726",
+                face_background="#101726",
+                grid_color="#1e293b",
+                header_background="#1e294b",
+                header_foreground="#f8fafc",
+                header_grid_color="#1e293b",
+                selected_cells_background="#8b5cf6",
+                selected_cells_foreground="#ffffff",
+                selected_rows_background="#8b5cf6",
+                selected_rows_foreground="#ffffff",
+                outline_color="#1e293b",
+                index_background="#101726",
+                index_foreground="#94a3b8",
+                index_grid_color="#1e293b"
+            )
+        except:
+            pass
 
-        self.log_text = tk.Text(log_frame, height=8, wrap=tk.WORD,
-                                bg="#1e1e1e", fg="#d4d4d4",
+        # --- Log Panel ---
+        log_card = GlassCard(self.editor_win, bg_color="#101726", border_color="#1e293b", radius=14)
+        log_card.pack(fill=tk.X, padx=10, pady=(5, 10))
+
+        log_container = tk.Frame(log_card, bg="#101726")
+        log_container.pack(fill=tk.BOTH, expand=True, padx=12, pady=10)
+
+        lbl_log_title = tk.Label(log_container, text="📋 HỆ THỐNG LOG HOẠT ĐỘNG", font=("Segoe UI", 9, "bold"), fg="#8b5cf6", bg="#101726")
+        lbl_log_title.pack(anchor=tk.W, pady=(0, 4))
+
+        text_frame = tk.Frame(log_container, bg="#101726")
+        text_frame.pack(fill=tk.X, expand=True)
+
+        self.log_text = tk.Text(text_frame, height=8, wrap=tk.WORD,
+                                bg="#0b0f19", fg="#e2e8f0",
                                 font=("Consolas", 10),
                                 insertbackground="#ffffff",
-                                selectbackground="#264f78",
+                                selectbackground="#8b5cf6",
                                 relief=tk.FLAT, padx=8, pady=5)
-        self.log_text.pack(fill=tk.X, expand=True)
+        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_text.yview)
+        scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=self.log_text.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.log_text.configure(yscrollcommand=scrollbar.set)
         self.log_text.configure(state=tk.DISABLED)
 
@@ -436,6 +604,8 @@ class AutoPostGUI:
         dialog.title("Chọn nguồn tải Media")
         dialog.geometry("380x180")
         dialog.resizable(False, False)
+        dialog.config(bg="#0a0e17")
+        ap_dung_glassmorphism(dialog)
         dialog.transient(self.root)
         dialog.grab_set()
 
@@ -444,13 +614,17 @@ class AutoPostGUI:
         y = self.root.winfo_y() + (self.root.winfo_height() - 180) // 2
         dialog.geometry(f"+{x}+{y}")
 
-        frame = ttk.Frame(dialog, padding=20)
-        frame.pack(fill=tk.BOTH, expand=True)
+        # Glassmorphism Card
+        card = GlassCard(dialog, bg_color="#101726", border_color="#1e293b", radius=14)
+        card.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
-        lbl = ttk.Label(frame, text="Bạn muốn tải lên tệp tin hay thư mục media?", font=("Segoe UI", 11, "bold"))
+        container = tk.Frame(card, bg="#101726")
+        container.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+
+        lbl = tk.Label(container, text="Bạn muốn tải lên tệp tin hay thư mục media?", font=("Segoe UI", 10, "bold"), fg="#8b5cf6", bg="#101726")
         lbl.pack(pady=(0, 20))
 
-        btn_frame = ttk.Frame(frame)
+        btn_frame = tk.Frame(container, bg="#101726")
         btn_frame.pack(fill=tk.X)
 
         result = {"path": None}
@@ -476,13 +650,13 @@ class AutoPostGUI:
         def huy_bo():
             dialog.destroy()
 
-        btn_folder = ttk.Button(btn_frame, text="📁 Thư mục", command=chon_thu_muc, style="Accent.TButton")
+        btn_folder = GlassButton(btn_frame, text="📁 Thư mục", command=chon_thu_muc, bg_color="#8b5cf6", hover_bg="#a855f7", active_bg="#7c3aed")
         btn_folder.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
 
-        btn_file = ttk.Button(btn_frame, text="🖼️ Ảnh/Video", command=chon_file)
+        btn_file = GlassButton(btn_frame, text="🖼️ Ảnh/Video", command=chon_file, bg_color="#3b82f6", hover_bg="#60a5fa", active_bg="#2563eb")
         btn_file.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 5))
 
-        btn_close = ttk.Button(btn_frame, text="❌ Hủy", command=huy_bo)
+        btn_close = GlassButton(btn_frame, text="❌ Hủy", command=huy_bo, bg_color="#1e293b", hover_bg="#334155", active_bg="#0f172a")
         btn_close.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
 
         # Đợi cửa sổ đóng
