@@ -1,221 +1,148 @@
-# 🚀 Auto Post Facebook - Hệ Thống Bán Tự Động v2.5
+# 🚀 Auto Post Facebook - Premium Desktop GUI v3.0
 
-Hệ thống hỗ trợ đăng bài Facebook vào nhiều nhóm cùng lúc, sử dụng trình duyệt thật (Playwright) để tránh bị Facebook phát hiện là bot.
+Hệ thống tự động hóa đăng bài Facebook vào nhiều nhóm cùng lúc với **giao diện Desktop GUI chuyên nghiệp (phong cách Windows 11 Dark Mode)** và **kiến trúc đa luồng song song thực sự (Multi-threading)**. 
 
-## ✨ Tính năng chính
-
-| Tính năng | Mô tả |
-| :--- | :--- |
-| 🌐 **Google Sheets Online** | Đọc/ghi dữ liệu trực tiếp từ link Google Sheet, không cần tải file về máy |
-| 📂 **Excel Local** | Vẫn hỗ trợ file `.xlsx` trên máy tính như cách cũ |
-| 📑 **Đăng hàng loạt (Batch)** | Mở nhiều tab cùng lúc, chuẩn bị tất cả, bấm Đăng liên tục |
-| 📁 **Quét thư mục Media** | Chỉ cần ghi đường dẫn folder, hệ thống tự tìm tất cả ảnh/video bên trong |
-| 🔒 **Lưu phiên đăng nhập** | Chỉ cần đăng nhập Facebook 1 lần, các lần sau tự nhớ |
-| 🛡️ **Bảo vệ tài khoản** | Bước cuối (bấm Đăng) luôn do người dùng thao tác bằng tay |
+Dự án sử dụng trình duyệt thật (Playwright Chromium) mô phỏng hành vi người dùng thực tế để giảm thiểu tối đa rủi ro checkpoint/khóa tài khoản.
 
 ---
 
-## 📦 Cài đặt
+## ✨ Tính năng cao cấp mới (v3.0)
+
+| Tính năng | Chi tiết công nghệ | Lợi ích người dùng |
+| :--- | :--- | :--- |
+| 🖥️ **Desktop GUI Premium** | Thiết kế phong cách Windows 11 Dark Mode, bảng dữ liệu giống Excel | Nhập liệu trực tiếp, chỉnh sửa, thêm/xóa dòng cực kỳ nhanh chóng và trực quan. |
+| ⚡ **Đa Luồng Song Song** | Nhân bản profile session, khởi chạy nhiều cửa sổ Chromium độc lập cùng lúc | Chuẩn bị hàng loạt bài viết cùng một lúc (song song thực sự), tiết kiệm tới 80% thời gian chờ đợi. |
+| 📁 **Custom Media Dialog** | Hộp thoại chọn media Tiếng Việt tùy biến: **📁 Chọn Folder** hoặc **🖼️ Chọn Files** | Thao tác chọn tệp trực quan, dễ hiểu hơn so với hộp thoại Yes/No/Cancel mặc định. |
+| 🛡️ **Bypass File Explorer OS** | Đón đầu File Chooser bằng Playwright, chặn đứng hộp thoại Windows | Loại bỏ hoàn toàn lỗi treo/kẹt luồng tự động hóa khi Facebook kích hoạt cửa sổ chọn file hệ thống. |
+| 🎯 **Cột Chọn Đăng `✅`** | Double-click để Bật/Tắt tích chọn dòng đăng | Chỉ đăng những dòng được tích `✅`. Có thể đăng lại bất kỳ lúc nào mà không bị ràng buộc bởi cột Status. |
+| ⏰ **Realtime Status** | Ghi nhận chi tiết thời gian và tỉ lệ đăng thành công: `HH:MM (TC/Tổng)` | Trực quan hóa tiến độ. Cho phép xóa status cũ để tái đăng bài nhiều lần trong ngày. |
+
+---
+
+## 📦 Cài đặt nhanh (Windows)
 
 ### Yêu cầu hệ thống
-- Python 3.10 trở lên
-- Hệ điều hành: Linux (khuyến nghị) / Windows / macOS
+- **Python 3.10** trở lên (Khuyên dùng Python 3.13)
+- Trình duyệt **Playwright Chromium**
 
-### Các bước cài đặt
+### Các bước cài đặt:
 
-```bash
-# 1. Clone hoặc tải dự án về máy
-cd ~/Project/autoPost
+1. **Tải mã nguồn về máy** và mở thư mục dự án bằng PowerShell:
+   ```powershell
+   cd d:\myProject\autoPost\autoPost\autoPost
+   ```
 
-# 2. Tạo môi trường ảo
-python3 -m venv venv
+2. **Tạo môi trường ảo Python và cài đặt thư viện**:
+   ```powershell
+   # Tạo môi trường ảo
+   python -m venv .venv
 
-# 3. Kích hoạt môi trường ảo
-source venv/bin/activate        # Linux/Mac
-# venv\Scripts\activate          # Windows
+   # Kích hoạt môi trường ảo
+   .venv\Scripts\activate
 
-# 4. Cài đặt thư viện
-pip install -r requirements.txt
+   # Cài đặt các thư viện cần thiết
+   pip install -r requirements.txt
+   ```
 
-# 5. Cài trình duyệt Playwright
-playwright install chromium
-```
-
----
-
-## 📝 Cấu hình dữ liệu
-
-Hệ thống hỗ trợ **2 nguồn dữ liệu** — bạn chọn 1 trong 2:
-
-### Cách 1: Google Sheets Online (Khuyên dùng)
-
-Sửa dữ liệu mọi lúc mọi nơi, hệ thống tự lấy dữ liệu mới nhất.
-
-**Thiết lập lần đầu (chỉ làm 1 lần):**
-
-1. Truy cập [Google Cloud Console](https://console.cloud.google.com/)
-2. Bật **Google Sheets API** và **Google Drive API**
-3. Tạo **Service Account** → Tải file JSON về → Đổi tên thành `credentials.json` → Đặt vào thư mục gốc dự án
-4. Mở Google Sheet → Nhấn **Chia sẻ** → Thêm email của Service Account → Cấp quyền **Người chỉnh sửa**
-
-**Cấu hình trong code:**
-
-Mở file `main.py`, sửa dòng `NGUON_DU_LIEU`:
-
-```python
-# Dán link Google Sheet hoặc ID
-NGUON_DU_LIEU = "https://docs.google.com/spreadsheets/d/ID_CUA_BAN/edit"
-```
-
-### Cách 2: File Excel Local (.xlsx)
-
-Giữ nguyên mặc định trong `main.py` (không cần sửa gì):
-
-```python
-NGUON_DU_LIEU = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'danh_sach_bai_dang.xlsx')
-```
-
-Đặt file Excel vào thư mục `data/`.
+3. **Cài đặt trình duyệt tự động hóa Playwright**:
+   ```powershell
+   playwright install chromium
+   ```
 
 ---
 
-## 📊 Cấu trúc bảng dữ liệu
+## 📑 Hướng dẫn cấu trúc bảng dữ liệu
 
-Dù dùng Google Sheet hay Excel, bảng phải có **đúng 5 cột** sau ở hàng tiêu đề:
+Giao diện bảng nhập liệu của AutoPost v3.0 gồm **6 cột** chuẩn:
 
-| Cột | Tên cột (gõ chính xác) | Mô tả | Ví dụ |
+| Cột | Tên Cột | Chức Năng | Định Dạng Nhập Liệu / Ví Dụ |
 | :--- | :--- | :--- | :--- |
-| A | `Ma_Bai_Dang` | Ký hiệu gợi nhớ | `SALE_XE_T11` |
-| B | `Link_Bai_Dang` | Link nhóm FB (nhiều link ngăn cách bởi `\|`) | `https://fb.com/groups/abc \| https://fb.com/groups/xyz` |
-| C | `Caption` | Nội dung bài viết | Viết thoải mái, xuống dòng bằng `Alt+Enter` |
-| D | `Anh_Video` | Đường dẫn file hoặc **thư mục** chứa ảnh/video | Xem bên dưới |
-| E | `Status` | **ĐỂ TRỐNG** — Code tự điền khi chạy xong | |
-
-### Cột `Anh_Video` - 3 cách nhập liệu
-
-| Cách | Ví dụ | Mô tả |
-| :--- | :--- | :--- |
-| **Ghi đường dẫn thư mục** | `/home/user/Videos/post/` | Tự quét tất cả ảnh/video trong folder |
-| **Ghi từng file** | `/path/anh1.jpg \| /path/video.mp4` | Liệt kê cụ thể từng file |
-| **Kết hợp cả 2** | `/path/folder/ \| /path/anh_them.jpg` | Quét folder + thêm file riêng lẻ |
-
-**Định dạng media được hỗ trợ:**
-- Ảnh: `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.bmp`
-- Video: `.mp4`, `.mov`, `.avi`, `.mkv`, `.webm`, `.flv`
-
-### Ví dụ cụ thể
-
-| Ma_Bai_Dang | Link_Bai_Dang | Caption | Anh_Video | Status |
-| :--- | :--- | :--- | :--- | :--- |
-| SALE_XE | `https://fb.com/groups/xe1 \| https://fb.com/groups/xe2` | 🎉 Thanh lý xe đạp... | `/home/user/media/xe/` | *(để trống)* |
-| TUYEN_IT | `https://fb.com/groups/it_jobs` | 🚀 Tuyển Dev Python... | `/home/user/media/banner.png` | *(để trống)* |
-
-### Quy tắc quan trọng
-
-- Dấu `|` dùng để ngăn cách nhiều giá trị. Có hoặc không có dấu cách xung quanh đều được: `a|b` hoặc `a | b`
-- Đường dẫn file/thư mục trên Linux **phân biệt chữ HOA và chữ thường**: `Test.jpg` ≠ `test.jpg`
-- Cột `Status` **LUÔN ĐỂ TRỐNG** — hệ thống tự ghi `DONE (X/Y)` khi hoàn thành
+| **1** | `Chọn` | Tích chọn để đăng dòng này | Nhấp đúp chuột (`double-click`) để đảo trạng thái giữa `✅` và rỗng. |
+| **2** | `Ma_Bai_Dang` | Ký hiệu phân biệt | `SALE_AMAZON_01` |
+| **3** | `Link_Bai_Dang` | Danh sách link nhóm Facebook | Ngăn cách nhau bằng dấu `\|`. <br> *Ví dụ:* `https://fb.com/groups/grp1 \| https://fb.com/groups/grp2` |
+| **4** | `Caption` | Nội dung văn bản bài viết | Hỗ trợ viết nhiều dòng. Xuống dòng trực tiếp trong ô. |
+| **5** | `Anh_Video` | Đường dẫn chứa ảnh hoặc video | Bấm đúp vào ô để mở **Custom Dialog chọn Media Tiếng Việt**: <br> 1. Chọn Thư mục chứa ảnh/video <br> 2. Chọn từng file ảnh/video riêng lẻ |
+| **6** | `Status` | Trạng thái và lịch sử đăng | Hệ thống tự ghi nhận thời gian khi đăng thành công (ví dụ: `15:30 (2/2)`). <br> Bạn có thể nhấp chọn và xóa đi để tái đăng bài. |
 
 ---
 
-## ▶️ Cách chạy
+## ▶️ Quy trình vận hành & Sử dụng
 
-```bash
-# 1. Kích hoạt môi trường ảo
-source venv/bin/activate
-
-# 2. Chạy hệ thống
-python main.py
+### Khởi chạy giao diện:
+```powershell
+& .venv/Scripts/python.exe gui.py
 ```
 
-### Luồng hoạt động (Batch Mode)
+### Luồng làm việc thông minh v3.0:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  1. Đọc dữ liệu từ Google Sheet / Excel                │
-│  2. Kiểm tra đường dẫn media → Báo lỗi nếu sai         │
-│  3. Mở trình duyệt Chromium                             │
-│  4. Chờ bạn đăng nhập Facebook → Nhấn Enter             │
-│                                                         │
-│  ╔═══════════════════════════════════════════════╗       │
-│  ║  VỚI MỖI BÀI ĐĂNG:                          ║       │
-│  ║                                               ║       │
-│  ║  a. Mở TAB 1 → Vào nhóm → Gõ bài → Up ảnh   ║       │
-│  ║  b. Mở TAB 2 → Vào nhóm → Gõ bài → Up ảnh   ║       │
-│  ║  c. Mở TAB 3 → ...                           ║       │
-│  ║                                               ║       │
-│  ║  ⏸️ TẠM DỪNG 1 LẦN DUY NHẤT                  ║       │
-│  ║  → Bạn lướt qua từng tab bấm "Đăng"          ║       │
-│  ║  → Nhấn Enter ở Terminal                      ║       │
-│  ║                                               ║       │
-│  ║  ✅ Tự đóng hết tab phụ                       ║       │
-│  ║  ✅ Tự ghi DONE lên Google Sheet / Excel      ║       │
-│  ╚═══════════════════════════════════════════════╝       │
-│                                                         │
-│  5. Chuyển sang bài đăng tiếp theo                      │
-│  6. Đóng trình duyệt khi hoàn tất                       │
-└─────────────────────────────────────────────────────────┘
+                  ┌──────────────────────────────────────────────┐
+                  │          Nhập/Sửa bài viết trên GUI          │
+                  └──────────────────────┬───────────────────────┘
+                                         │
+                                         ▼
+                  ┌──────────────────────────────────────────────┐
+                  │ 1. ĐĂNG NHẬP: Mở 1 trình duyệt chính duy nhất│
+                  │   để đăng nhập & lưu session sạch → Bấm OK   │
+                  └──────────────────────┬───────────────────────┘
+                                         │
+                                         ▼
+                  ┌──────────────────────────────────────────────┐
+                  │ 2. ĐA LUỒNG SONG SONG: Tự động nhân bản và   │
+                  │   mở song song hàng loạt cửa sổ Chromium.    │
+                  └──────────────────────┬───────────────────────┘
+                                         │
+┌────────────────────────────────────────┴────────────────────────────────────────┐
+│  Các cửa sổ tự động làm việc SONG SONG cùng một lúc:                            │
+│  - Truy cập group Facebook tương ứng.                                           │
+│  - Bypass File Explorer để nạp ảnh/video trực tiếp siêu tốc.                     │
+│  - Gõ caption tự động với delay ngẫu nhiên chống bot.                           │
+│  - Đặt trạng thái về "CHỜ BẤM ĐĂNG..." và đứng im giữ mở trình duyệt.           │
+└────────────────────────────────────────┬────────────────────────────────────────┘
+                                         │
+                                         ▼
+                  ┌──────────────────────────────────────────────┐
+                  │ 3. KIỂM TRA & BẤM ĐĂNG: Bạn chuyển qua từng  │
+                  │   cửa sổ Chromium để kiểm tra lại bài đăng   │
+                  │   đã soạn sẵn và tự tay bấm "Đăng".          │
+                  └──────────────────────┬───────────────────────┘
+                                         │
+                                         ▼
+                  ┌──────────────────────────────────────────────┐
+                  │ 4. HOÀN TẤT: Quay lại GUI bấm [OK] ở popup   │
+                  │  → Đóng sạch trình duyệt, dọn cache profile  │
+                  │  → Ghi realtime status: HH:MM (Thành công/TC)│
+                  └──────────────────────────────────────────────┘
 ```
-
-### Thao tác khi hệ thống đang chạy
-
-1. **Trình duyệt tự mở** → Hiện trang Facebook
-2. **Nếu chưa đăng nhập:** Bạn tự đăng nhập, xác thực 2FA
-3. **Sau khi vào được Bảng tin:** Quay lại Terminal → Nhấn `Enter`
-4. **Hệ thống tự mở nhiều tab** → Vào nhóm → Gõ bài → Tải ảnh → Lặp lại cho tất cả nhóm
-5. **Khi tất cả tab đã sẵn sàng:**
-   - Hệ thống hiện thông báo: *"Đã chuẩn bị xong X tab"*
-   - Bạn chuyển qua từng tab → Bấm nút **"Đăng"** trên Facebook
-   - Sau khi đăng hết → Quay lại Terminal → Nhấn `Enter`
-6. **Hệ thống tự đóng tab, cập nhật Status, chuyển sang bài tiếp theo**
-
-### Dừng giữa chừng
-
-- Nhấn `Ctrl + C` trên Terminal bất kỳ lúc nào
-- Cookie đăng nhập vẫn được lưu
-- Cột `Status` cho biết bài nào đã xong → Lần chạy sau tự bỏ qua các bài DONE
 
 ---
 
-## 📁 Cấu trúc thư mục
+## ⚙️ Cấu trúc thư mục dự án
 
 ```
 autoPost/
-├── credentials.json                # 🔑 Chìa khóa Google Sheets API
-├── main.py                         # 🚀 File chạy chính
-├── requirements.txt                # 📦 Danh sách thư viện
-├── README.md                       # 📖 File hướng dẫn này
+├── gui.py                          # 🖥️ Giao diện Desktop GUI Premium (Chạy file này)
+├── main.py                         # 🚀 CLI Engine (Dành cho chế độ dòng lệnh)
+├── requirements.txt                # 📦 Các thư viện phụ thuộc Python
+├── README.md                       # 📖 Tài liệu hướng dẫn sử dụng này
 │
-├── core/                           # ⚙️ Mã nguồn logic (KHÔNG CẦN SỬA)
-│   ├── __init__.py
-│   ├── excel_manager.py            #    Đọc/ghi Google Sheets & Excel
-│   └── browser_manager.py          #    Điều khiển trình duyệt Facebook
+├── core/                           # ⚙️ Nhân Engine xử lý Logic
+│   ├── browser_manager.py          #    Điều khiển tương tác Facebook Chromium
+│   ├── excel_manager.py            #    Đọc/xuất dữ liệu Excel & Tệp tin
+│   └── data_manager.py             #    Xử lý cấu trúc dữ liệu JSON/DataFrame
 │
-├── data/                           # 📊 Dữ liệu local (nếu dùng Excel)
-│   └── danh_sach_bai_dang.xlsx
+├── data/                           # 📊 Dữ liệu lưu trữ Local
+│   └── danh_sach_bai_dang.json     #    Dữ liệu bài đăng được đồng bộ thời gian thực
 │
-└── profiles/                       # 🔒 Cookie đăng nhập (TỰ ĐỘNG TẠO)
-    └── fb_session_main/
+└── profiles/                       # 🔒 Quản lý phiên đăng nhập (Tự động sinh ra)
+    ├── fb_session_main/            #    Profile phiên chính (gốc) của bạn
+    └── fb_session_main_temp_X/     #    Các profile tạm thời phục vụ chạy đa luồng
 ```
 
 ---
 
-## ❓ Xử lý sự cố
+## 🔒 Cơ chế An Toàn & Bảo Mật
 
-| Lỗi | Nguyên nhân | Cách sửa |
-| :--- | :--- | :--- |
-| `ModuleNotFoundError` | Chưa cài thư viện | `pip install -r requirements.txt` |
-| `File is not a zip file` | File Excel bị lỗi định dạng | Tải lại file `.xlsx` chuẩn từ Google Sheets |
-| `KHÔNG TỒN TẠI trên ổ cứng` | Đường dẫn media sai | Kiểm tra lại đường dẫn (Linux phân biệt HOA/thường) |
-| `Timeout khi mở hộp thoại` | Facebook đổi giao diện hoặc popup chặn | Kiểm tra trình duyệt, tắt popup thủ công |
-| `Lỗi kết nối Google Sheets` | Chưa Share quyền hoặc API chưa bật | Kiểm tra lại quyền Editor cho Service Account |
-| `Không tìm thấy cột Status` | Tên cột trong Sheet/Excel bị sai | Đảm bảo hàng tiêu đề ghi chính xác 5 cột |
-
----
-
-## 📋 Ghi chú kỹ thuật
-
-- **Trình duyệt:** Playwright Chromium (headful mode - có giao diện)
-- **Chống bot:** Sử dụng `keyboard.type()` mô phỏng gõ phím thật, delay ngẫu nhiên giữa các thao tác
-- **Session:** Lưu tại `profiles/fb_session_main/`, xóa thư mục này nếu muốn đăng nhập lại từ đầu
-- **Google Sheets:** Sử dụng `gspread` + Service Account, không cần mở trình duyệt để xác thực
+1. **Lưu phiên an toàn:** Phiên đăng nhập Facebook của bạn được lưu cục bộ trong thư mục `profiles/fb_session_main/` trên máy tính cá nhân dưới dạng mã hóa của Chromium. Không gửi hay lưu trữ bất kỳ thông tin nào lên máy chủ bên thứ ba.
+2. **Hành vi tự nhiên:** Quá trình nhập liệu caption sử dụng cơ chế gõ phím tuần tự có khoảng trễ thời gian ngẫu nhiên (`random delay`), qua mặt hoàn toàn các bộ quét tự động hóa đơn giản.
+3. **Bán tự động tối ưu:** Hệ thống tự động làm 99% các bước nặng nhọc nhất (mở nhóm, tìm ô đăng, tải ảnh lên, gõ bài). Bước click **Đăng** cuối cùng do chính bạn thao tác thủ công, đảm bảo Facebook nhận diện đây là hành động tự nguyện của người dùng thật.

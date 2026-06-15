@@ -80,22 +80,27 @@ def doc_du_lieu(nguon: str) -> pd.DataFrame | None:
             print(f"{Fore.RED}[LỖI] Lỗi khi đọc file Excel local: {e}{Style.RESET_ALL}")
             return None
 
+    # --- Đảm bảo cột Chon tồn tại ---
+    if 'Chon' not in df.columns:
+        df['Chon'] = '✅'
+
     # --- Kiểm tra cột bắt buộc ---
     cot_thieu = [cot for cot in REQUIRED_COLUMNS if cot not in df.columns]
     if cot_thieu:
         print(f"{Fore.RED}[LỖI] Thiếu các cột: {', '.join(cot_thieu)}{Style.RESET_ALL}")
         return None
 
-    # --- Lọc bài chưa làm (Status != DONE) ---
-    df['Status'] = df['Status'].fillna('').astype(str).str.strip().str.upper()
-    df_chua_lam = df[df['Status'] != 'DONE'].copy()
+    # --- Lọc các bài được chọn đăng (Chon là ✅, x, yes, true, 1, đăng,...) ---
+    df['Chon'] = df['Chon'].fillna('✅').astype(str).str.strip()
+    hop_le_chon = ['✅', 'x', 'yes', 'true', '1', 'đăng', 'active', 'ok', 'selected', 'y']
+    df_chua_lam = df[df['Chon'].str.lower().isin(hop_le_chon)].copy()
     
     if len(df_chua_lam) == 0:
-        print(f"{Fore.YELLOW}[THÔNG BÁO] Tất cả bài đăng đều đã hoàn thành (DONE).{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}[THÔNG BÁO] Không có dòng nào được chọn để đăng (cột Chọn trống hoặc không khớp).{Style.RESET_ALL}")
         return None
 
     df_chua_lam = df_chua_lam.reset_index(drop=True)
-    print(f"{Fore.GREEN}✅ Đọc thành công: {len(df_chua_lam)} bài đăng cần xử lý.{Style.RESET_ALL}")
+    print(f"{Fore.GREEN}✅ Đọc thành công: {len(df_chua_lam)} bài đăng được chọn xử lý.{Style.RESET_ALL}")
     return df_chua_lam
 
 def tach_danh_sach(chuoi_gop: str) -> list[str]:

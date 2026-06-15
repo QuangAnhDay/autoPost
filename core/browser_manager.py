@@ -228,6 +228,10 @@ def tai_file_media(page: Page, danh_sach_file: list[str]) -> bool:
         cac_selector_media = [
             'div[aria-label*="Ảnh/video"]',
             'div[aria-label*="Photo/video"]',
+            'div[aria-label*="Ảnh/Video"]',
+            'div[aria-label*="Photo/Video"]',
+            'div[aria-label="Ảnh/video"]',
+            'div[aria-label="Photo/video"]',
         ]
 
         for sel in cac_selector_media:
@@ -240,6 +244,20 @@ def tai_file_media(page: Page, danh_sach_file: list[str]) -> bool:
                     break
             except Exception:
                 continue
+
+        if not da_click:
+            # Thử tìm theo text bên trong dialog có chứa từ khóa
+            try:
+                # Tìm phần tử có chứa chữ "Ảnh/video" hoặc "Photo/video"
+                for kw in ["Ảnh/video", "Photo/video", "Ảnh/Video", "Photo/Video"]:
+                    icon = dialog.get_by_text(kw, exact=False).first
+                    if icon.is_visible(timeout=2000):
+                        icon.click(force=True)
+                        da_click = True
+                        time.sleep(3)
+                        break
+            except Exception:
+                pass
 
         if not da_click:
             print(f"{Fore.YELLOW}  ⚠️ Không tìm thấy nút Ảnh/video trong dialog. Thử tìm input file trực tiếp...{Style.RESET_ALL}")

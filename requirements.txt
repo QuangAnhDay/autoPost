@@ -4,3 +4,5 @@ openpyxl
 colorama
 gspread
 oauth2client
+tksheet
+sv-ttk
