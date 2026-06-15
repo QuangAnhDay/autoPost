@@ -152,8 +152,8 @@ class GlassButton(tk.Button):
 # ═══════════════════════════════════════════════════════════════
 # CONSTANTS
 # ═══════════════════════════════════════════════════════════════
-COLUMNS = ["Mã bài", "Link nhóm FB", "Caption", "Ảnh/Video", "Hẹn giờ", "Status", "Chọn"]
-COL_KEYS = ["ma_bai", "links", "caption", "media", "hen_gio", "status", "chon"]
+COLUMNS = ["Mã bài", "Link nhóm FB", "Caption", "Ảnh/Video", "Status", "Chọn"]
+COL_KEYS = ["ma_bai", "links", "caption", "media", "status", "chon"]
 WINDOW_TITLE = "🚀 AutoPost - Quản lý bài đăng"
 WINDOW_SIZE = "1200x700"
 MIN_WIDTH = 900
@@ -174,7 +174,7 @@ class AutoPostGUI:
         screen_height = self.root.winfo_screenheight()
         x_coord = screen_width - 320 - 20
         y_coord = 20
-        self.root.geometry(f"320x210+{x_coord}+{y_coord}")
+        self.root.geometry(f"320x180+{x_coord}+{y_coord}")
 
         # Áp dụng theme Sun Valley (Windows 11 style)
         sv_ttk.set_theme("dark")
@@ -189,10 +189,6 @@ class AutoPostGUI:
 
         self._tao_giao_dien_mini()
         self._tai_du_lieu()
-
-        # Khởi động vòng lặp kiểm tra hẹn giờ chạy ngầm
-        self._vong_lap_hen_gio_thread = threading.Thread(target=self._vong_lap_hen_gio, daemon=True)
-        self._vong_lap_hen_gio_thread.start()
 
     def _tao_giao_dien_mini(self):
         """Tạo giao diện mini dashboard siêu gọn ở góc trên bên phải màn hình."""
@@ -211,23 +207,7 @@ class AutoPostGUI:
         lbl_title.pack(anchor=tk.W, pady=(0, 2))
 
         self.lbl_status = tk.Label(container, text="Trạng thái: Sẵn sàng", font=("Segoe UI", 9, "bold"), fg="#10b981", bg="#101726")
-        self.lbl_status.pack(anchor=tk.W, pady=(0, 4))
-
-        # Checkbox Hẹn giờ tự động
-        self.var_hen_gio = tk.BooleanVar(value=False)
-        self.chk_hen_gio = tk.Checkbutton(
-            container,
-            text="⏰ Bật hẹn giờ tự động",
-            variable=self.var_hen_gio,
-            bg="#101726",
-            fg="#cbd5e1",
-            selectcolor="#0b0f19",
-            activebackground="#101726",
-            activeforeground="#f8fafc",
-            font=("Segoe UI", 9),
-            command=self._thay_doi_che_do_hen_gio
-        )
-        self.chk_hen_gio.pack(anchor=tk.W, pady=(0, 6))
+        self.lbl_status.pack(anchor=tk.W, pady=(0, 6))
 
         # Log container dạng kính tối màu hơn
         log_bg = tk.Frame(container, bg="#0b0f19", padx=8, pady=6)
@@ -404,17 +384,16 @@ class AutoPostGUI:
             "edit_cell",
         ))
 
-        self.sheet.column_width(column=0, width=100)
-        self.sheet.column_width(column=1, width=240)
-        self.sheet.column_width(column=2, width=280)
-        self.sheet.column_width(column=3, width=200)
-        self.sheet.column_width(column=4, width=120)
-        self.sheet.column_width(column=5, width=120)
-        self.sheet.column_width(column=6, width=60)
+        self.sheet.column_width(column=0, width=120)
+        self.sheet.column_width(column=1, width=280)
+        self.sheet.column_width(column=2, width=300)
+        self.sheet.column_width(column=3, width=220)
+        self.sheet.column_width(column=4, width=140)
+        self.sheet.column_width(column=5, width=60)
 
-        self.sheet.readonly_columns(columns=[5])
+        self.sheet.readonly_columns(columns=[4])
         self.sheet.extra_bindings("begin_edit_cell", self._begin_edit_cell)
-        self.sheet.extra_bindings("double_click_left_click", self._double_click_sheet)
+        self.sheet.bind("<Double-Button-1>", self._double_click_sheet)
 
         # Thay đổi giao diện tksheet đồng bộ với màu kính
         self.sheet.change_theme("dark blue")
@@ -488,24 +467,6 @@ class AutoPostGUI:
     def _begin_edit_cell(self, event = None):
         """Chặn người dùng sửa thủ công cột Chọn (cột 5)."""
         try:
-            col = None
-            if event is not None:
-                if hasattr(event, "column"):
-                    col = event.column
-                elif isinstance(event, dict) and "column" in event:
-                    col = event["column"]
-                elif isinstance(event, (list, tuple)) and len(event) >= 2:
-                    col = event[1]
-            
-            if col == 5:  # Cột Chọn (0-indexed)
-                return False
-        except:
-            pass
-        return True
-
-    def _double_click_sheet(self, event = None):
-        """Khi người dùng double click vào cột Chọn, tự động toggle trạng thái giữa ✅ và trống."""
-        try:
             row, col = None, None
             if event is not None:
                 if hasattr(event, "row") and hasattr(event, "column"):
@@ -514,23 +475,66 @@ class AutoPostGUI:
                     row, col = event["row"], event["column"]
                 elif isinstance(event, (list, tuple)) and len(event) >= 2:
                     row, col = event[0], event[1]
+            
+            if col == 5:  # Cột Chọn (0-indexed)
+                return None  # Trả về None để hủy chỉnh sửa trong tksheet
+            
+            if row is not None and col is not None:
+                val = self.sheet.get_cell_data(row, col)
+                return "" if val is None else str(val)
+        except:
+            pass
+        return None
 
+    def _double_click_sheet(self, event = None):
+        """Khi người dùng double click vào cột Chọn, tự động toggle trạng thái giữa ✅ và trống."""
+        try:
+            row, col = None, None
+            print(f"[DEBUG] _double_click_sheet called with event={event}")
+            if event is not None:
+                # 1. Thử nhận diện qua tọa độ click (rất chính xác cho Tkinter events)
+                if hasattr(event, "x") and hasattr(event, "y"):
+                    try:
+                        row = self.sheet.MT.identify_row(event)
+                        col = self.sheet.MT.identify_col(event)
+                        print(f"[DEBUG] Coordinate-based: row={row}, col={col}")
+                    except Exception as err:
+                        print(f"[DEBUG] Coordinate-based failed: {err}")
+                
+                # 2. Thử qua thuộc tính row/column trực tiếp của event
+                if row is None or col is None:
+                    if hasattr(event, "row") and hasattr(event, "column"):
+                        row, col = event.row, event.column
+                        print(f"[DEBUG] Event attributes: row={row}, col={col}")
+                    elif isinstance(event, dict) and "row" in event and "column" in event:
+                        row, col = event["row"], event["column"]
+                        print(f"[DEBUG] Event dict: row={row}, col={col}")
+                    elif isinstance(event, (list, tuple)) and len(event) >= 2:
+                        row, col = event[0], event[1]
+                        print(f"[DEBUG] Event list/tuple: row={row}, col={col}")
+
+            # 3. Fallback: Lấy ô đang được chọn hiện tại
             if row is None or col is None:
                 selected = self.sheet.get_currently_selected()
+                print(f"[DEBUG] Fallback Selected representation: {repr(selected)}")
                 if selected is not None:
                     if isinstance(selected, (list, tuple)):
                         row, col = selected[0], selected[1]
                     else:
                         row, col = selected.row, selected.column
+                    print(f"[DEBUG] Fallback chosen: row={row}, col={col}")
 
             if row is not None and col == 5:  # Cột Chọn (0-indexed)
                 val = self.sheet.get_cell_data(row, col)
                 current = "" if val is None else str(val).strip()
                 new_val = "" if current in ("✅", "None", "nan") else "✅"
+                print(f"[DEBUG] Toggling row={row}, col={col} from '{current}' to '{new_val}'")
                 self.sheet.set_cell_data(row, col, new_val)
                 self.sheet.refresh()
+                self._luu_du_lieu()
         except Exception as e:
             self._ghi_log(f"Lỗi nhấp đúp ô: {e}")
+            print(f"[DEBUG] Lỗi nhấp đúp ô: {e}")
 
     def _tai_du_lieu(self):
         """Tải dữ liệu từ file JSON vào bộ nhớ."""
@@ -576,7 +580,7 @@ class AutoPostGUI:
             return
         try:
             data = self.sheet.get_sheet_data()
-            new_row = ["", "", "", "", "", "", "✅"]
+            new_row = ["", "", "", "", "", "✅"]
             data.append(new_row)
             self.sheet.set_sheet_data(data)
             self.sheet.refresh()
@@ -748,12 +752,12 @@ class AutoPostGUI:
         # Chạy trên thread riêng để GUI không bị đơ
         self._posting_thread = threading.Thread(
             target=self._chay_posting_engine,
-            args=(posts_duoc_chon, False),
+            args=(posts_duoc_chon,),
             daemon=True,
         )
         self._posting_thread.start()
 
-    def _chay_posting_engine(self, posts: list[dict], tu_dong_dang=False):
+    def _chay_posting_engine(self, posts: list[dict]):
         """Chạy Playwright posting engine trên thread riêng chuẩn bị song song hàng loạt."""
         try:
             from playwright.sync_api import sync_playwright
@@ -788,8 +792,7 @@ class AutoPostGUI:
                         'stt': stt,
                         'tong': len(links),
                         'event_cho_dang': event_cho_dang,
-                        'event_chuan_bi_xong': threading.Event(),
-                        'tu_dong_dang': tu_dong_dang
+                        'event_chuan_bi_xong': threading.Event()
                     })
 
             if not nhiem_vu:
@@ -806,8 +809,7 @@ class AutoPostGUI:
                         except Exception:
                             pass
 
-            # BƯỚC 1: Mở trình duyệt chính một lần duy nhất để người dùng đăng nhập/kiểm tra phiên đăng nhập (chỉ chạy ở chế độ thủ công)
-            if not tu_dong_dang:
+            # BƯỚC 1: Mở trình duyệt chính một lần duy nhất để người dùng đăng nhập/kiểm tra phiên đăng nhập
                 self._ghi_log_safe("🌐 Đang mở trình duyệt chính để xác nhận đăng nhập Facebook...")
                 with sync_playwright() as p:
                     context = p.chromium.launch_persistent_context(
@@ -842,8 +844,6 @@ class AutoPostGUI:
                     except Exception:
                         pass
                     self._ghi_log_safe("🔒 Đã lưu phiên đăng nhập chính thành công.")
-            else:
-                self._ghi_log_safe("⏰ Chế độ tự động: Bỏ qua bước xác nhận đăng nhập, tiến hành chạy trực tiếp...")
 
             # BƯỚC 2: Khởi chạy song song các luồng (mỗi luồng một trình duyệt riêng)
             self._ghi_log_safe(f"🚀 Bắt đầu mở SONG SONG {len(nhiem_vu)} cửa sổ trình duyệt...")
@@ -868,16 +868,12 @@ class AutoPostGUI:
             for task in nhiem_vu:
                 task['event_chuan_bi_xong'].wait()
 
-            if not tu_dong_dang:
                 self._ghi_log_safe("🔔 Đã chuẩn bị xong tất cả bài viết! Mời bạn kiểm tra và tự tay bấm đăng.")
+
                 # Lúc này mới hiển thị Dialog chờ người dùng kiểm tra và bấm Đăng trên các cửa sổ
                 self._cho_bam_dang_event = threading.Event()
                 self.root.after(0, lambda n=len(nhiem_vu): self._hien_thi_cho_dang_dialog(n))
                 self._cho_bam_dang_event.wait()
-            else:
-                self._ghi_log_safe("⚡ Chế độ tự động: Đang tự động click đăng trên các cửa sổ...")
-                # Cho các luồng con thêm 15 giây để click đăng hoàn tất trước khi đóng
-                time.sleep(15)
 
             # Kích hoạt toàn bộ các event để các luồng đóng trình duyệt của mình
             self._ghi_log_safe("🧹 Đang đóng toàn bộ các cửa sổ trình duyệt...")
@@ -978,37 +974,23 @@ class AutoPostGUI:
                                 # Gọi hàm tai_file_media_safe xử lý thông minh để chặn File Explorer OS!
                                 if self._tai_file_media_safe(page, media):
                                     if go_caption(page, caption):
-                                        if task.get('tu_dong_dang'):
-                                            self._ghi_log_safe(f"  ⚡ Tự động click 'Đăng' cho cửa sổ {task_idx}...")
-                                            if self._bam_nut_dang(page):
-                                                success = True
-                                            else:
-                                                self._ghi_log_safe(f"  ❌ Lỗi tự động click Đăng ở cửa sổ {task_idx}")
-                                        else:
-                                            success = True
+                                        success = True
 
                         if success:
                             ban_ghi_thanh_cong[ma_bai] = ban_ghi_thanh_cong.get(ma_bai, 0) + 1
-                            if task.get('tu_dong_dang'):
-                                self._cap_nhat_status_bang(ma_bai, "THÀNH CÔNG")
-                                self._ghi_log_safe(f"  ✅ Cửa sổ {task_idx} cho [{ma_bai}] tự động ĐĂNG XONG!")
-                            else:
-                                self._cap_nhat_status_bang(ma_bai, "CHỜ BẤM ĐĂNG...")
-                                self._ghi_log_safe(f"  ✅ Cửa sổ {task_idx} cho [{ma_bai}] chuẩn bị XONG!")
+                            self._cap_nhat_status_bang(ma_bai, "CHỜ BẤM ĐĂNG...")
+                            self._ghi_log_safe(f"  ✅ Cửa sổ {task_idx} cho [{ma_bai}] chuẩn bị XONG!")
                         else:
                             self._cap_nhat_status_bang(ma_bai, "THẤT BẠI")
-                            self._ghi_log_safe(f"  ❌ Cửa sổ {task_idx} cho [{ma_bai}] bị LỖI chuẩn bị/đăng.")
+                            self._ghi_log_safe(f"  ❌ Cửa sổ {task_idx} cho [{ma_bai}] bị LỖI chuẩn bị.")
                     except Exception as task_err:
                         self._cap_nhat_status_bang(ma_bai, "LỖI")
                         self._ghi_log_safe(f"  ❌ Lỗi tương tác ở cửa sổ {task_idx} ([{ma_bai}]): {task_err}")
                     finally:
                         task['event_chuan_bi_xong'].set()
 
-                    # DÙ THÀNH CÔNG HAY LỖI, LUÔN LUÔN GIỮ CỬA SỔ TRÌNH DUYỆT MỞ CHỜ USER BẤM ĐĂNG XONG (nếu không tự động đăng)
-                    if not task.get('tu_dong_dang'):
-                        task['event_cho_dang'].wait()
-                    else:
-                        time.sleep(8)
+                    # DÙ THÀNH CÔNG HAY LỖI, LUÔN LUÔN GIỮ CỬA SỔ TRÌNH DUYỆT MỞ CHỜ USER BẤM ĐĂNG XONG
+                    task['event_cho_dang'].wait()
 
                     # Đóng trình duyệt
                     try:
@@ -1170,128 +1152,6 @@ class AutoPostGUI:
                 except Exception:
                     pass
             self.root.after(0, _update)
-
-    def _thay_doi_che_do_hen_gio(self):
-        """Xử lý khi người dùng click checkbox bật/tắt hẹn giờ tự động."""
-        if self.var_hen_gio.get():
-            self._ghi_log("⏰ Đã bật chế độ hẹn giờ đăng bài tự động.")
-        else:
-            self._ghi_log("⏰ Đã tắt chế độ hẹn giờ đăng bài.")
-
-    def _kiem_tra_den_gio(self, time_str: str) -> bool:
-        """Kiểm tra xem mốc giờ hẹn đã đến hoặc đã qua chưa (trong vòng 1 tiếng)."""
-        if not time_str or not time_str.strip():
-            return False
-        time_str = time_str.strip()
-        import datetime
-        now = datetime.datetime.now()
-        
-        # 1. Định dạng HH:MM (VD: 16:30)
-        try:
-            t = datetime.datetime.strptime(time_str, "%H:%M").time()
-            if now.time() >= t:
-                # Đảm bảo bài chỉ tự động chạy nếu mốc thời gian trôi qua không quá 60 phút
-                # Tránh trường hợp vừa bật app lên tự động chạy các bài từ nhiều tiếng trước
-                diff_minutes = (now.hour - t.hour) * 60 + (now.minute - t.minute)
-                if 0 <= diff_minutes <= 60:
-                    return True
-            return False
-        except ValueError:
-            pass
-
-        # 2. Định dạng DD/MM/YYYY HH:MM (VD: 15/06/2026 16:30)
-        try:
-            dt = datetime.datetime.strptime(time_str, "%d/%m/%Y %H:%M")
-            if now >= dt:
-                diff = (now - dt).total_seconds() / 60.0
-                if 0 <= diff <= 60:
-                    return True
-            return False
-        except ValueError:
-            pass
-
-        # 3. Định dạng YYYY-MM-DD HH:MM (VD: 2026-06-15 16:30)
-        try:
-            dt = datetime.datetime.strptime(time_str, "%Y-%m-%d %H:%M")
-            if now >= dt:
-                diff = (now - dt).total_seconds() / 60.0
-                if 0 <= diff <= 60:
-                    return True
-            return False
-        except ValueError:
-            pass
-
-        return False
-
-    def _vong_lap_hen_gio(self):
-        """Vòng lặp ngầm kiểm tra và kích hoạt đăng bài khi đến giờ hẹn."""
-        import time
-        while True:
-            try:
-                if hasattr(self, 'var_hen_gio') and self.var_hen_gio.get() and not self.dang_chay:
-                    posts = self._lay_du_lieu_tu_bang()
-                    posts_den_gio = []
-                    
-                    for p in posts:
-                        ma_bai = p.get('ma_bai', '').strip()
-                        hen_gio = p.get('hen_gio', '').strip()
-                        chon = p.get('chon', '').strip()
-                        status = p.get('status', '').strip().upper()
-                        
-                        if ma_bai and chon and hen_gio:
-                            # Không đăng lại bài đã hoàn thành hoặc đang chờ/đang chuẩn bị
-                            da_dang = any(x in status for x in ["CHỜ BẤM ĐĂNG", "ĐANG CHUẨN BỊ", "THÀNH CÔNG", "OK"])
-                            if not da_dang and self._kiem_tra_den_gio(hen_gio):
-                                posts_den_gio.append(p)
-                                
-                    if posts_den_gio:
-                        self._ghi_log_safe(f"⏰ Phát hiện {len(posts_den_gio)} bài đăng đến giờ hẹn! Bắt đầu auto đăng...")
-                        self.dang_chay = True
-                        
-                        # Cập nhật nút đăng thành đang chạy
-                        self.root.after(0, lambda: self.btn_dang.configure(text="⏳ Đang chạy...", state=tk.DISABLED))
-                        
-                        self._posting_thread = threading.Thread(
-                            target=self._chay_posting_engine,
-                            args=(posts_den_gio, True), # tu_dong_dang=True
-                            daemon=True
-                        )
-                        self._posting_thread.start()
-            except Exception as e:
-                print(f"Lỗi kiểm tra hẹn giờ: {e}")
-            time.sleep(30)
-
-    def _bam_nut_dang(self, page) -> bool:
-        """Tự động tìm và click nút 'Đăng' hoặc 'Post' trên Facebook."""
-        import time
-        try:
-            dialog = page.locator('div[role="dialog"]').first
-            selectors = [
-                lambda: dialog.get_by_role("button", name="Đăng", exact=True),
-                lambda: dialog.get_by_role("button", name="Post", exact=True),
-                lambda: dialog.locator('div[aria-label="Đăng"][role="button"]'),
-                lambda: dialog.locator('div[aria-label="Post"][role="button"]'),
-                lambda: dialog.locator('div[aria-label="Đăng"]'),
-                lambda: dialog.locator('div[aria-label="Post"]'),
-                lambda: dialog.get_by_text("Đăng", exact=True),
-                lambda: dialog.get_by_text("Post", exact=True),
-            ]
-            
-            for sel_fn in selectors:
-                try:
-                    btn = sel_fn()
-                    if btn.is_visible(timeout=1500):
-                        btn.click()
-                        return True
-                except:
-                    continue
-            
-            # Gửi tổ hợp phím Ctrl + Enter làm phương án dự phòng
-            page.keyboard.press("Control+Enter")
-            return True
-        except Exception as e:
-            self._ghi_log_safe(f"⚠️ Lỗi click Đăng: {e}")
-            return False
 
     def chay(self):
         """Khởi chạy vòng lặp chính của GUI."""
