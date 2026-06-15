@@ -28,6 +28,7 @@ def tao_bai_moi() -> dict:
         "links": "",
         "caption": "",
         "media": "",
+        "hen_gio": "",
         "status": "",
         "chon": "✅",
     }
@@ -84,11 +85,12 @@ def posts_to_dataframe(posts: list[dict]) -> pd.DataFrame:
         links   -> Link_Bai_Dang
         caption -> Caption
         media   -> Anh_Video
+        hen_gio -> Hen_Gio
         status  -> Status
         chon    -> Chon
     """
     if not posts:
-        return pd.DataFrame(columns=['Ma_Bai_Dang', 'Link_Bai_Dang', 'Caption', 'Anh_Video', 'Status', 'Chon'])
+        return pd.DataFrame(columns=['Ma_Bai_Dang', 'Link_Bai_Dang', 'Caption', 'Anh_Video', 'Hen_Gio', 'Status', 'Chon'])
 
     rows = []
     for p in posts:
@@ -97,6 +99,7 @@ def posts_to_dataframe(posts: list[dict]) -> pd.DataFrame:
             'Link_Bai_Dang': p.get('links', ''),
             'Caption': p.get('caption', ''),
             'Anh_Video': p.get('media', ''),
+            'Hen_Gio': p.get('hen_gio', ''),
             'Status': p.get('status', ''),
             'Chon': p.get('chon', '✅'),
         })
